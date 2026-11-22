@@ -13,3 +13,5 @@ A cycling navigation and safety system for a bike. The phone works out the route
 Each folder has a `SPECIFICATION.md` saying what its code does, how to build it and what is still to do. Start there.
 
 Each ESP32 module has one `.ino` file: open it in the Arduino IDE, pick the ESP32 board and click Upload.
+
+Anyone adding code (people or AI agents) should read [AGENTS.md](AGENTS.md) first.

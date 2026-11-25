@@ -228,6 +228,8 @@ Not covered by tests: real Bluetooth radio behaviour, real GPS, live OpenRouteSe
 
 ## 9. To add to the Front Module (plain-English brief)
 
+> **Built in Front Module firmware v1.21** (`Front Module/front_module.ino`, section 1.2 of its spec), not yet flashed. Its decoder is checked against all 415 screens from `navigation/tool/export_screens.dart` by `Tools/Phone Link Test/`.
+
 1. Receive ESP-NOW packets from the Main Module (accept only the Main Module's MAC).
 2. For packets starting with `0x10`: collect the chunks of one frame number (bytes 1-3: frame#, index, count); a different frame number starts over.
 3. When all chunks are in: join them in index order, **PackBits-decode** them (section 3.5, step 3), check you got exactly 1024 bytes, **undo the row XOR** (for i = 16 … 1023: `buf[i] ^= buf[i-16]`), then `display.clearDisplay(); display.drawBitmap(0, 0, buf, 128, 64, SSD1306_WHITE); display.display();`.
@@ -237,7 +239,7 @@ Not covered by tests: real Bluetooth radio behaviour, real GPS, live OpenRouteSe
 
 ## 10. Known gaps and next steps
 
-1. **Hardware link not yet tried:** the Main Module side (section 8) is written and installed (firmware v1.26) but hasn't been tried with the phone yet; the Front Module side (section 9) isn't built yet. Until then, the demo module exercises the identical code path.
+1. **Hardware link not yet tried:** the Main Module side (section 8) is written and installed (firmware v1.26) but hasn't been tried with the phone yet; the Front Module side (section 9) is written (Front v1.21) but not yet flashed. Until then, the demo module exercises the identical code path.
 2. **Screen off / app in background:** while **navigating**, GPS runs as a foreground service (a "Bike Nav is navigating" notification), so directions keep going to the handlebar with the screen off. **Close Pass mode on its own** (not navigating) only runs while the app is open or recently used. Android may pause it in the background, so for rides without navigation keep the app open, or add a foreground service for the Bluetooth link (task P6).
 3. **Live services untested from here:** real OpenRouteService routes (OpenRouteService moved to `api.heigit.org` on 24 Nov 2026; the app uses the new address, which was checked to answer, but not with a real key) (a saved Dublin route is used in tests), OpenAI plate reading on real camera photos, and the website (not built yet).
 4. **Plate reading is only as good as the photos:** QVGA (320×240) photos of a moving car are small, so the camera resolution may need raising for reliable plates. The app reports honest confidence and never auto-uploads an unsure plate.

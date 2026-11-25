@@ -3,8 +3,14 @@
 #define LIDAR_RX_PIN 16
 
 // =============================================================================
-// Main Module firmware v1.25: LiDAR close-pass / approach detector, warning
+// Main Module firmware v1.28: LiDAR close-pass / approach detector, warning
 // lights, camera trigger, and the Bluetooth link to the phone
+//
+// v1.28 = the installed v1.26 + one fix, marked "v1.28:": the USB image
+// debugger ('@' lines) ignores '\r' (Windows/CRLF line endings) and reports
+// every rejected line as "ERR USB IMAGE ...", instead of dropping it silently
+// (which looked like a timeout to the sender).
+// (v1.27 is the number of Oscar's Chrome page on the Mac, so it is skipped.)
 //
 // v1.25 = the reconstructed v1.21 relay + the phone link (Bluetooth LE) +
 // forwarding the phone's handlebar screens to the Front Module. Not related
@@ -1058,8 +1064,8 @@ void reportStatus() {
     // recognise the board; v1.25 adds the phone-link line after it.
     Serial.println(radioReady ? "READY 1.20 RADIO OK" : "READY 1.20 RADIO ERROR");
     Serial.println(displayRadioReady ? "INFO DISPLAY RELAY READY" : "INFO DISPLAY RELAY ERROR");
-    Serial.println(phone::bluetoothStarted() ? "INFO PHONE LINK 1.25 BLUETOOTH READY"  // v1.25
-                                             : "INFO PHONE LINK 1.25 BLUETOOTH ERROR");
+    Serial.println(phone::bluetoothStarted() ? "INFO PHONE LINK 1.28 BLUETOOTH READY"  // v1.28: was 1.25
+                                             : "INFO PHONE LINK 1.28 BLUETOOTH ERROR");
     Serial.println("USB IMAGE READY 1.26");
     versionPending = false;
   }
@@ -1342,24 +1348,38 @@ int imageNibble(char c) {
   return -1;
 }
 
+// v1.28: every rejected line is reported ("ERR USB IMAGE ..."); was silent.
+void imageLineError(const char *why) {
+  char message[96];
+  snprintf(message,sizeof(message),"ERR USB IMAGE %s (%u hex digits)",why,(unsigned)imageUsed);
+  debugLine(message);
+}
+
 bool readImageByte(uint8_t byte) {
-  if (imageLine && millis()-imageLastByte > 2000) imageLine=false;
+  if (imageLine && millis()-imageLastByte > 2000) { imageLine=false; imageLineError("line timed out"); }
   if (byte=='@') { imageLine=true; imageUsed=0; imageLastByte=millis(); return true; }
   if (!imageLine) return false;
   imageLastByte=millis();
+  if (byte=='\r') return true;  // v1.28: allow CRLF line endings
   if (byte!='\n') {
     if (imageUsed<sizeof(imageHex) && imageNibble(byte)>=0) imageHex[imageUsed++]=byte;
-    else imageLine=false;
+    else {
+      imageLine=false;
+      imageLineError(imageUsed<sizeof(imageHex) ? "bad character: use lowercase hex 0-9 a-f" : "line too long: 472 hex digits expected");
+    }
     return true;
   }
   imageLine=false;
-  if (imageUsed!=sizeof(imageHex)) return true;
+  if (imageUsed!=sizeof(imageHex)) { imageLineError("wrong length: 472 hex digits expected"); return true; }
   Reply packet={};
   auto *raw=reinterpret_cast<uint8_t*>(&packet);
   for (size_t i=0;i<sizeof(packet);++i)
     raw[i]=(imageNibble(imageHex[i*2])<<4)|imageNibble(imageHex[i*2+1]);
   if (!packet.request.token || packet.total>maxJpeg || packet.request.offset>=packet.total ||
-      packet.request.offset%chunkSize) return true;
+      packet.request.offset%chunkSize) {
+    imageLineError("bad packet: need token != 0, total <= 131072, offset < total and a multiple of 224 (little-endian)");
+    return true;
+  }
   esp_err_t result=displayRadioReady ? esp_now_send(displayBroadcast,raw,sizeof(packet)) : ESP_FAIL;
   char message[96];
   snprintf(message,sizeof(message),"USBFRAME %lu %lu %d",(unsigned long)packet.request.token,
@@ -1659,7 +1679,7 @@ const char *const phoneToMainUuid = "6e3b2001-8f7a-4c1e-9b52-2d1c0b7a1f10";  // 
 const char *const mainToPhoneUuid = "6e3b2002-8f7a-4c1e-9b52-2d1c0b7a1f10";  // notify
 const uint8_t frontMac[] = {0x8c, 0x94, 0xdf, 0x6c, 0xbc, 0x80};  // Front Module (change if replaced)
 constexpr uint8_t firmwareMajor = 1;
-constexpr uint8_t firmwareMinor = 25;
+constexpr uint8_t firmwareMinor = 28;  // v1.28: was 25
 constexpr uint32_t clipBeforeMs = 2000;     // LiDAR clip: this long before the close pass...
 constexpr uint32_t clipAfterMs = 1500;      // ...to this long after
 constexpr size_t clipSlots = 40;            // recent scans kept (4 s at 10 scans/s)

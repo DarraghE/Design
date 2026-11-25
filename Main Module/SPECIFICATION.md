@@ -4,9 +4,9 @@
 |---|---|
 | **Module** | Main Module: the hub at the back of the bike. It handles LiDAR detection, the warning lights and the camera trigger, and is the phone's main link (called the "relay" / "rear" in older notes) |
 | **Runs on** | FireBeetle ESP32, mounted at the back of the bike |
-| **Code file** | `main_module.ino` (Arduino sketch, firmware **v1.26**: "BikeNav USB v1.26") |
-| **Status** | **Installed on the rear board** (25 Nov 2026, from the team's `BikeNav_Installed_Firmware_2026-11-25` archive): the board answered with the v1.26 handshake over USB. A USB image transfer then timed out at byte zero (section 6, item 2). **The Bluetooth link to the phone hasn't been tried yet.** Compiles (ESP32 core 3.3.8, NimBLE-Arduino 2.5.2); its Bluetooth bytes are checked against the phone app's decoder on a computer (`Tools/Phone Link Test/`). |
-| **Source** | `Rear_v1.21_reconstructed/Relay/` from the team's `BikeNav_PreBluetooth_Source` bundle (25 Nov 2026): `Relay.ino` and `TestImage.h`, plus `Detection.h`, `ScanInput.h`, `Stl19p.h` and `Radio.h`, which are byte-identical to v1.13's (`Archive/Firmware_Backup_v2_2026-11-25/LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/`). Merged into one file; every v1.25 change is marked `v1.25:`; the phone link is new code in the last two sections. **v1.26** (Oscar, 25 Nov 2026) = v1.25 + a USB image debugger (`readImageByte`, section 2.1) and `#define LIDAR_RX_PIN 16` as the first line. This file is the installed source, unchanged. The version numbers 1.22–1.24 were used for phone experiments on Oscar's Mac that aren't in this repo; v1.25 is unrelated to them. |
+| **Code file** | `main_module.ino` (Arduino sketch, firmware **v1.28**) |
+| **Status** | **v1.28 written, not yet flashed; the board runs v1.26.** v1.28 = v1.26 + clear error replies from the USB image debugger (section 2.1); nothing else changed, so reflashing is only needed for that. v1.26 is installed (25 Nov 2026, from the team's `BikeNav_Installed_Firmware_2026-11-25` archive): the board answered with the v1.26 handshake over USB. A USB image transfer then timed out at byte zero (section 6, item 2). **The Bluetooth link to the phone hasn't been tried yet.** Compiles (ESP32 core 3.3.8, NimBLE-Arduino 2.5.2); its Bluetooth bytes are checked against the phone app's decoder on a computer (`Tools/Phone Link Test/`). |
+| **Source** | `Rear_v1.21_reconstructed/Relay/` from the team's `BikeNav_PreBluetooth_Source` bundle (25 Nov 2026): `Relay.ino` and `TestImage.h`, plus `Detection.h`, `ScanInput.h`, `Stl19p.h` and `Radio.h`, which are byte-identical to v1.13's (`Archive/Firmware_Backup_v2_2026-11-25/LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/`). Merged into one file; every v1.25 change is marked `v1.25:`; the phone link is new code in the last two sections. **v1.26** (Oscar, 25 Nov 2026) = v1.25 + a USB image debugger (`readImageByte`, section 2.1) and `#define LIDAR_RX_PIN 16` as the first line. v1.28 changes to it are marked `v1.28:` (v1.27 is the number of Oscar's Chrome page, so it was skipped). The version numbers 1.22–1.24 were used for phone experiments on Oscar's Mac that aren't in this repo; v1.25 is unrelated to them. |
 
 ## 1. What this module does
 
@@ -114,14 +114,14 @@ The phone is the Bluetooth central; the Main Module is the peripheral. The byte 
 
 | Input | Meaning |
 |-------|---------|
-| `V` | Report versions: `READY 1.20 RADIO OK`/`ERROR`, `INFO DISPLAY RELAY READY`/`ERROR`, `INFO PHONE LINK 1.25 BLUETOOTH READY`/`ERROR`, `USB IMAGE READY 1.26`. The first line still says 1.20 (as v1.21 did) so existing viewers recognise the board |
+| `V` | Report versions: `READY 1.20 RADIO OK`/`ERROR`, `INFO DISPLAY RELAY READY`/`ERROR`, `INFO PHONE LINK 1.28 BLUETOOTH READY`/`ERROR`, `USB IMAGE READY 1.26` (unchanged in v1.28: Oscar's tools check it). The first line still says 1.20 (as v1.21 did) so existing viewers recognise the board |
 | `C` | Test lights (3 flashes) |
 | `A` / `M` | Automatic actions (lights + photos) on / off. On at power-up since v1.25 |
 | `P` | Test camera (one photo; also shown on the Front Module) |
 | `T` | Send the built-in test JPEG to the Front Module |
 | `R` | Reset the detectors |
 | `X` | **v1.25:** fake a close pass (phone alert, 5-photo burst, package to the phone) to test the phone link |
-| `@` + 472 hex digits + `\n` | **v1.26 USB image debugger:** one 236-byte JPEG packet (camera `Reply` layout: token, offset, total, 224 bytes) as **lowercase** hex. If valid (token ≠ 0, total ≤ 128 KB, offset < total and a multiple of 224) it is broadcast to the Front Module and the module prints `USBFRAME <token> <offset> <esp_err>`. Anything else on the line (uppercase hex, `\r`, other characters) silently drops the line. A line not finished within 2 s is dropped. Used by Oscar's v1.27 Chrome page on the Mac (not in this repo) |
+| `@` + 472 hex digits + `\n` | **v1.26 USB image debugger:** one 236-byte JPEG packet (camera `Reply` layout: token, offset, total, 224 bytes) as **lowercase** hex. If valid (token ≠ 0, total ≤ 128 KB, offset < total and a multiple of 224) it is broadcast to the Front Module and the module prints `USBFRAME <token> <offset> <esp_err>`. **v1.28:** `\r` is ignored (CRLF line endings work), and a rejected line gets `ERR USB IMAGE <reason> (<n> hex digits)`: bad character (uppercase hex isn't accepted, because a stray `A` or `C` would be a command), wrong length, bad packet, or line timed out (2 s). In v1.26 all of these were dropped silently. Used by Oscar's v1.27 Chrome page on the Mac (not in this repo) |
 | Framed data | Starts and ends with `0x7E`. Inside, `0x7E` and `0x7D` are sent as `0x7D` followed by (byte XOR `0x20`) |
 
 Frame contents, little-endian:
@@ -214,7 +214,7 @@ Implemented in v1.25 (`namespace phone`; byte builders in `namespace wire`). All
 | Photos and test JPEG to the Front Module (broadcast) | Written (v1.20) | `forwardDisplay`, `debugJpeg` |
 | USB diagnostics (`DEBUG HEALTH/WATCH/CAMERA/DISPLAY`) | Written (v1.20) | `reportStatus`, `diagnosticWatch`, `debugLine` |
 | Test commands V / C / A / M / P / T / R, and X (fake close pass, v1.25) | Written | `receiveInput` |
-| USB image debugger (`@` hex lines → Front Module) | Written (v1.26), installed; first transfer timed out | `readImageByte`, `imageNibble` |
+| USB image debugger (`@` hex lines → Front Module) | Written (v1.26), installed; first transfer timed out. Error replies added in v1.28 | `readImageByte`, `imageNibble`, `imageLineError` |
 | Direct LiDAR wiring to the ESP32 (UART2) | Written, needs `LIDAR_RX_PIN=16` at build time (section 4.3) | `#ifdef LIDAR_RX_PIN` |
 | Bluetooth LE server for the phone, hello/status | Written (v1.25), not hardware-tested | `phone::begin`, `phone::service`, `phone::sendStatus` |
 | Forward phone screens to the Front Module | Written (v1.25), not hardware-tested | `phone::PhoneWrites::onWrite` |
@@ -279,10 +279,10 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 ## 6. Known gaps and next steps
 
 1. **v1.21 is a reconstruction.** The team's bundle says `Rear_v1.21_reconstructed` was rebuilt from the documented v1.21 changes (GPIO2 driver, non-blocking light test, startup test) on the recovered v1.20 sketch. The original Mac source and its final upload were never verified, and the v1.20 sketch itself was recovered from a terminal listing with v1.19 headers. If Oscar's original v1.21 turns up, compare it with the `From Relay.ino` section and port the `v1.25:` changes (section 8.2).
-2. **USB image transfer timed out at byte zero** (Oscar's test, 25 Nov 2026). Not diagnosed. Likely causes to check first: the sender must send **lowercase** hex and end each line with `\n` only. An uppercase digit or a `\r` (Windows/`\r\n` line endings) makes `readImageByte` drop the whole line **without any reply**, which looks exactly like a timeout. The sender should wait for `USBFRAME` after each line. Also, the line parser takes priority over commands: a command letter sent while an `@` line is open ends that line and is lost.
+2. **USB image transfer timed out at byte zero** (Oscar's test on v1.26, 25 Nov 2026). In v1.26 an uppercase hex digit, a `\r`, a wrong length or an invalid packet (e.g. token 0, or big-endian numbers) dropped the line **without any reply**, which looks exactly like a timeout. v1.28 accepts `\r` and replies `ERR USB IMAGE <reason>` to everything else, so the next try will say what's wrong. The Chrome page (not in the repo) must send lowercase hex of the little-endian 236-byte packet and wait for `USBFRAME` after each line. Also, a command letter sent while an `@` line is open ends that line and is lost.
 3. **Phone link not run on hardware.** Compiles, and its bytes are checked against the app on a computer, but Bluetooth + ESP-NOW together, photo transfer speed with Bluetooth connected, memory with 5 photos held, and notification pacing are all untested on the board.
 4. **Bit-banged LED driver + Bluetooth (untested):** `directLedShow` holds off interrupts on its core for about 1 ms per strip update. Wi-Fi and Bluetooth run on the other core, so this should be fine, but check that the strip colours are stable and the phone link doesn't drop while the lights flash.
-5. **Front Module shows camera photos.** Every photo is still broadcast to the Front Module as a JPEG (v1.20 behaviour), and the current Front receiver draws it. Once the Front Module shows the phone's navigation screens, photos would overwrite them during a burst. Decide whether to keep `forwardDisplay` (one line in `captureBurst` and `capturePhotos`). The broadcast also reaches any ESP-NOW device on channel 6.
+5. **Camera photos to the Front Module:** every photo is still broadcast to the Front Module (v1.20 behaviour). Front v1.21 ignores them while the phone's screens are showing, so they no longer cover the directions; the broadcast still takes air time during a burst and reaches any ESP-NOW device on channel 6.
 6. **Viewer out of date:** `Tools/LiDAR Viewer/` is the v1.13 viewer. It works with v1.25's USB lines but has no buttons for `A`/`M`/`T`, and expects bursts to be saved per photo. Add Oscar's newer viewer to `Tools/` if it is still needed.
 7. **Warning persistence:** the team earlier asked for warnings that last at least 1 s. The code renews a 2 s warning on fresh evidence, which is not the same rule. Confirm which is wanted.
 8. **Thresholds not validated:** test stationary and in controlled conditions first (suggested order: ports → version → lights → camera → LiDAR orientation → replay → live). Don't do unsafe road tests. **This must not be the only safety device on a bike.**
@@ -297,8 +297,9 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 
 - Detection logic is the `lidar::Detector` class. Every number in sections 1.2–1.4 comes from the code. If you change a number, update this file.
 - **Don't silently "fix" the known issues in section 6.** They are decisions for the team. Report them instead.
-- `READY 1.20 RADIO` is deliberately unchanged (viewers look for it). The other version lines are `INFO PHONE LINK 1.25` (phone link, matches `phone::firmwareMajor/Minor` sent to the phone) and `USB IMAGE READY 1.26` (Oscar's USB tools check it). Change a version line only together with the tool that reads it.
-- This file is the **installed** source (v1.26). Keep the repo in step with what is on the board.
+- `READY 1.20 RADIO` is deliberately unchanged (viewers look for it). The other version lines are `INFO PHONE LINK 1.28` (firmware version, matches `phone::firmwareMajor/Minor` sent to the phone) and `USB IMAGE READY 1.26` (Oscar's USB tools check it). Change a version line only together with the tool that reads it.
+- The board runs v1.26; this file is v1.28. Keep the Status line saying which version is installed.
+- Bluetooth memory: on ESP32 core 3.3+, the core frees the Bluetooth memory at boot unless the `esp32-hal-bt-mem.h` flag is set. NimBLE-Arduino 2.5.2 sets it (through `esp32-hal-bt.h`); checked in the built firmware (`_setBtLibraryInUse`). If you change the Bluetooth library, check this again.
 - **The `wire` namespace between `// BEGIN PHONE WIRE` and `// END PHONE WIRE` must stay plain C++** (no Arduino calls): `Tools/Phone Link Test/run_test.py` compiles it on a computer. After changing it or the package logic, run that test and `flutter test test/firmware_vectors_test.dart` in `Phone App/app`, and commit the regenerated `firmware_notifications.txt`.
 - NimBLE callbacks run on the Bluetooth task: keep them short (forward screens, set atomics). Everything else happens in `phone::service()` from `loop()`.
 - Don't set `WiFi.setSleep(false)` again: with Bluetooth on, ESP-IDF aborts unless Wi-Fi modem sleep is enabled.
@@ -313,11 +314,11 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 ### 8.1 Bench test (no LiDAR needed)
 
 1. v1.26 is already on the board (or flash it, section 5). Power the Camera Module.
-2. Serial monitor at 460800: the strip flashes 3 times; send `V` → `INFO PHONE LINK 1.25 BLUETOOTH READY`.
-3. Phone: Bike Nav app → Main Module card → **BikeNav Main**. USB shows `INFO Phone connected`; the app shows firmware **1.25** and ✓/✗ for LiDAR, camera and Front Module.
+2. Serial monitor at 460800: the strip flashes 3 times; send `V` → `INFO PHONE LINK 1.28 BLUETOOTH READY` (`1.25` on v1.26).
+3. Phone: Bike Nav app → Main Module card → **BikeNav Main**. USB shows `INFO Phone connected`; the app shows firmware **1.28** (1.25 on v1.26) and ✓/✗ for LiDAR, camera and Front Module. The Front ✓ needs Front v1.21 (it reports delivery of the phone's screens).
 4. Send `X`: the app shows the close-pass alert at once; after ~4-5 s USB shows `INFO Close pass N ready for the phone …` then `… delivered to the phone`, and the app's **Recordings** has the photos (and the LiDAR replay if scans are coming in).
 5. With the LiDAR on GPIO16, a real close pass should do the same with a distance, and the strip should flash.
-6. Once the Front Module has its phone-frame code: start a navigation in the app (or **Simulate the ride**) and the handlebar screen should follow.
+6. With Front v1.21 flashed: the handlebar shows the app's screen within 3 s of connecting; start a navigation (or **Simulate the ride**) and it follows each turn.
 
 ### 8.2 Moving the phone link onto other relay source
 

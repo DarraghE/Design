@@ -8,9 +8,9 @@ A cycling navigation and safety system for a bike in Ireland:
 | Folder | Runs on | Status | Code |
 |--------|---------|--------|------|
 | [Phone App](Phone%20App/SPECIFICATION.md) | Android phone (Pixel 9a) | **App complete**: Navigation and Close Pass modes, Bluetooth link, LiDAR replay, OpenAI plate reading, website upload, demo module. 87 tests pass, including the Main Module firmware's Bluetooth bytes. Not yet tried with the real modules. **Install: [`Phone App/release/BikeNav.apk`](Phone%20App/release/BikeNav.apk)** | Flutter app (`app/`) + navigation package (`navigation/`) |
-| [Front Module](Front%20Module/SPECIFICATION.md) | ESP32 DevKit V1 + 128x64 OLED | **Installed:** wireless JPEG receiver (v1.19): shows the camera photos the Main Module sends. Showing the phone's navigation frames: **designed, to build** (its spec, section 8) | `front_module.ino` |
+| [Front Module](Front%20Module/SPECIFICATION.md) | ESP32 DevKit V1 + 128x64 OLED | **v1.21 written, to flash:** shows the phone's navigation screens (decoder checked on all 415 app screens) and camera photos when no phone is connected. The board still runs v1.19, which ignores the phone's screens | `front_module.ino` |
 | [Camera Module](Camera%20Module/SPECIFICATION.md) | M5Stack Timer Camera X | Working photo server over ESP-NOW (uploaded 22 Nov, per the backup) | `camera_module.ino` |
-| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts, photos to the Front Module. **v1.26 is installed on the board** (= reconstructed v1.21 + the Bluetooth phone link + a USB image debugger). The phone link compiles and its bytes match the app, but **hasn't been tried with the phone yet** (see its spec, section 6) | `main_module.ino` |
+| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts, photos to the Front Module. **v1.26 is installed on the board** (= reconstructed v1.21 + the Bluetooth phone link + a USB image debugger); v1.28 adds error replies to the USB image debugger. The phone link compiles and its bytes match the app, but **hasn't been tried with the phone yet** (see its spec, section 6) | `main_module.ino` |
 | [Tools](Tools/README.md) | A computer | Occasional helpers: flash script, LiDAR viewer, OLED image test | |
 | [Archive](Archive/ARCHIVE_NOTE.md) | n/a | Old repo contents and the original firmware backup, kept unchanged for reference | |
 
@@ -30,7 +30,7 @@ Each module folder has a `SPECIFICATION.md` saying what its code does, how to bu
  Main Module ──ESP-NOW (photos as JPEG)──▶ Front Module (OLED, 80x60 picture)
 
  Phone App: complete. Works with its built-in demo Main Module. Main Module v1.26 (installed)
- has the Bluetooth side, not yet tried with the phone; the Front Module still needs its frame display.
+ has the Bluetooth side, not yet tried with the phone. Front v1.21 (written, to flash) draws the phone's screens.
 ```
 
 **Designed (phone side built and tested; ESP32 side to build):**

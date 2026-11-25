@@ -125,9 +125,11 @@ class NavState {            // returned after every GPS fix
 }
 ```
 
-## 5. Interface to the Front Module (the contract it must follow)
+## 5. Interface to the Front Module (draft, being replaced)
 
-The Front Module is empty for now. When it's built it must match this, or both sides must change together.
+> **Planned change (team decision, 25 Nov 2026):** the phone will draw each navigation screen as an image and send it over Bluetooth to a "main module", which passes it straight on to the Front Module. The Front Module then just shows images. This replaces the symbol-ID design below. **The phone code still implements the design below**, and no Bluetooth code exists yet. The open questions (which board is the main module, the link, the frame bit order) are listed in `Front Module/SPECIFICATION.md` section 1.2. `renderOled` already draws every screen as a 128 × 64 frame, and `OledFrame.toSsd1306()` gives the 1024 bytes in the SSD1306's page layout. The Front Module's current image receiver expects row-by-row bytes instead, so one side will need converting.
+
+The rest of this section is the earlier draft, kept because it is what `symbols.dart`, `protocol.dart` and `oled.dart` implement today.
 
 ### 5.1 Display symbol IDs
 
@@ -161,7 +163,7 @@ Clearing the screen sends `[1, 0, 0xFF, 0xFF, 0]`.
 
 ### 5.3 Screen layout the module must draw
 
-- 0.96" **128x64 SSD1306** OLED, I2C address `0x3C`. Buy the **Blue or White** version, not Yellow/Blue.
+- 0.96" **128x64 SSD1306** OLED, I2C address `0x3C`. Buy the **Blue or White** version, not Yellow/Blue. The team's latest stated wiring is SDA GPIO15 / SCL GPIO22. Design-group's firmware used SDA GPIO21. See `Front Module/SPECIFICATION.md` section 4.
 - **Left 57x64 area:** the arrow, scaled to fill the area. Its angle shows how sharp the turn is: straight 0°, slight 45°, normal 90°, sharp 135°. U-turns go round to the right. The roundabout is a clockwise circle with the exit number inside.
 - **Right:** distance, rounded like a bike computer: `87 m`, `120 m` (to 10 m above 100 m), `2.3 km`.
 - No text on turn screens. Only the arrived, rerouting, no-phone and battery screens have words.
@@ -205,7 +207,8 @@ Android permissions: `INTERNET`, `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION
 4. **Trigger level:** the app uses Level 1. To use Level 2 or 3, change `NavConfig(mode: ...)` in `destination_screen.dart`. Level 3 also needs `prepareRoute: (r) => addJunctions(r)`.
 5. **Untested against live services:** a route with a roundabout (to check `exit_number`), and the live Overpass junction query.
 6. **Tuning:** record a real ride as GPX and replay it at all three levels to tune the 100 m, 10 m and 30 m values.
-7. **Rear and Camera Modules:** no phone-side code exists for them yet.
+7. **Rear and Camera Modules:** both now have firmware (LiDAR detection, warning lights, close-pass photos), but they talk to a Mac over USB, not to the phone. There's no phone-side code or protocol for them yet. If the Rear Module becomes the "main module", the phone link would also carry the navigation images.
+8. **Image-based navigation (planned):** see the note at the top of section 5.
 
 ## 8. Notes for AI assistants
 

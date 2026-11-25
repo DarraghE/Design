@@ -1,0 +1,150 @@
+{
+  "note": "Index excludes itself",
+  "files": [
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Flash_Relay.command",
+      "bytes": 771,
+      "sha256": "e2b5538db3df5225b93f80818adc77844449b99a422529671f24d5e2a435036e"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Detection.h",
+      "bytes": 8040,
+      "sha256": "95584ad05cdb939a995275ffb3087b16fdecca37be9bb4a89dced2ea6a696ddb"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Radio.h",
+      "bytes": 1076,
+      "sha256": "505329e1095be9bd13cfd681042400f4747674cdb133d1bc83d4225a0d38cbcd"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Relay.ino",
+      "bytes": 10466,
+      "sha256": "54a5a750c27fbc07cbf090613a92e04498394284d4e3cdfae854d2cae1339287"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/ScanInput.h",
+      "bytes": 2251,
+      "sha256": "e8b74ebe03e73306b4694f1af376ff2f01ef9e2aac96525b17335204812ffba8"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Stl19p.h",
+      "bytes": 4254,
+      "sha256": "0661bd5d4ca859ee63f63011f41e470c24ec7d911d9e06be6feb425560164470"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/Mac_Viewer/index.html",
+      "bytes": 5241,
+      "sha256": "6e4868cd1f672dda95e6d29d965542e4c8277987a9455a1747041880bde52300"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/Mac_Viewer/lidar_core.py",
+      "bytes": 14324,
+      "sha256": "00da532e5caaf36854bfb803adb0b039cda2afee1953855accbd902804b82bf4"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/Mac_Viewer/scan_wire.py",
+      "bytes": 1971,
+      "sha256": "9f6cef6965b7ceba3056eea75ba3f07d5945b8d2e73e0ba62f8cce8338f770f3"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/Mac_Viewer/viewer.py",
+      "bytes": 17496,
+      "sha256": "ecce0b6943504fa89012132255b7c35a21d709c6a694031827b6c726ae5beb23"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/README.md",
+      "bytes": 3010,
+      "sha256": "def8290628de3590435ffbef87dfa5d5fbfe4c6849687a99bdb9c4ea9fc8a303"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/TimerCam/Camera/Camera.ino",
+      "bytes": 4841,
+      "sha256": "ed21a16bfd62913b3ae5608c0fcde4472ec780ecba5b5b4bb4dab5f7b59be27b"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/TimerCam/Flash_Camera.command",
+      "bytes": 795,
+      "sha256": "daf2dad6334e34265cb0c8b0461dce554784c159fcbfc4380e3bbefeeaae5b28"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/TimerCam/Recovery/Camera/Camera.ino",
+      "bytes": 3684,
+      "sha256": "9b880bdc058bf62a12eeacb3f75c3b96eccfaa49525009625eefa2fa12256be8"
+    },
+    {
+      "path": "LiDAR_v1.13_Complete_Setup/TimerCam/Recovery/Camera/Radio.h",
+      "bytes": 1076,
+      "sha256": "505329e1095be9bd13cfd681042400f4747674cdb133d1bc83d4225a0d38cbcd"
+    },
+    {
+      "path": "OLED_GPIO15_22/OLED_Dashboard_v2.html",
+      "bytes": 4057,
+      "sha256": "48c1297729856d26aef4eb1714588216571565a23d9b22244ca25efea5be89b9"
+    },
+    {
+      "path": "OLED_GPIO15_22/Receiver/Receiver.ino",
+      "bytes": 980,
+      "sha256": "4369f41cf953ed786f34a1d052aebd48323de05b80c46df1705474593495787a"
+    },
+    {
+      "path": "OLED_GPIO15_22/sender.py",
+      "bytes": 590,
+      "sha256": "27b9c8da8435ba615814541197d1685d0e81fa0f44f6610ae070ad76849d1ff9"
+    },
+    {
+      "path": "OLED_GPIO15_22/test.sh",
+      "bytes": 1186,
+      "sha256": "97a2a843d27eac2bd7d741f2dbee2f4ae6a6a0671ac2ea1899185a43375fc8d1"
+    },
+    {
+      "path": "OLED_Test_v1/OLED_Dashboard_v2.html",
+      "bytes": 4057,
+      "sha256": "48c1297729856d26aef4eb1714588216571565a23d9b22244ca25efea5be89b9"
+    },
+    {
+      "path": "OLED_Test_v1/Receiver/Receiver.ino",
+      "bytes": 980,
+      "sha256": "2c6b3fb94ffdecd04351fbe978c764476b402201898e52a1d87ac72d18b4598d"
+    },
+    {
+      "path": "OLED_Test_v1/sender.py",
+      "bytes": 590,
+      "sha256": "27b9c8da8435ba615814541197d1685d0e81fa0f44f6610ae070ad76849d1ff9"
+    },
+    {
+      "path": "OLED_Test_v1/test.sh",
+      "bytes": 1186,
+      "sha256": "97a2a843d27eac2bd7d741f2dbee2f4ae6a6a0671ac2ea1899185a43375fc8d1"
+    },
+    {
+      "path": "README.txt",
+      "bytes": 204,
+      "sha256": "3a3616045e8fa56c08e4579d85145a3df614ae70514ccc9fd040bdc4e69afffc"
+    },
+    {
+      "path": "README_MASTER.md",
+      "bytes": 16341,
+      "sha256": "28c7881a102f55b55202d77fe9abbafeeba57816694f633510c652e35309ce06"
+    },
+    {
+      "path": "README_ORIGINAL_v1.txt",
+      "bytes": 836,
+      "sha256": "d540025f0305f351287c110f738a681b909738a1e549aef6e833283f7d84cf65"
+    },
+    {
+      "path": "TimerCam_Camera_Only/Camera/Camera.ino",
+      "bytes": 4873,
+      "sha256": "9177ed9b50b4e77bfd2511dac48779047c0ef761bdc920c19ba4f7fcd4a29404"
+    },
+    {
+      "path": "TimerCam_Camera_Only/README.md",
+      "bytes": 1651,
+      "sha256": "378dd6d3ae97ec4fa44efd4cafe13fe4e60c85251d09e9d422662da3de467d1c"
+    },
+    {
+      "path": "hardware_manifest.json",
+      "bytes": 4608,
+      "sha256": "bed40d6115924df38fd4696a426ba1729f29e408fc8548de14e3ed5e09fc7ad7"
+    }
+  ]
+}

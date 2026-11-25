@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "archive_version": "2",
+  "snapshot_date": "2026-11-25",
+  "documentation_only": true,
+  "hardware_tested_this_revision": false,
+  "devices": {
+    "oled": {
+      "board": "ESP32 DevKit V1 (user reported)",
+      "preferred_sketch": "OLED_GPIO15_22/Receiver/Receiver.ino",
+      "preferred_flash_verified": false,
+      "previous_sketch": "OLED_Test_v1/Receiver/Receiver.ino",
+      "previous_upload_log_success": true,
+      "pins": {
+        "SDA": 15,
+        "SCL": 22,
+        "VDD": "3V3",
+        "GND": "GND"
+      },
+      "previous_pins": {
+        "SDA": 21,
+        "SCL": 22
+      },
+      "display": {
+        "controller_assumed": "SSD1306",
+        "width": 128,
+        "height": 64,
+        "i2c_address_hex": "0x3C",
+        "reset_gpio": -1
+      },
+      "serial_baud": 115200,
+      "packet": {
+        "magic": "OLED",
+        "height_byte": 64,
+        "bitmap_bytes": 1024,
+        "total_bytes": 1029,
+        "bit_order": "MSB first",
+        "layout": "row-major"
+      },
+      "automatic_relay_link": false
+    },
+    "camera": {
+      "board": "M5Stack Timer Camera X",
+      "sensor": "OV3660",
+      "preferred_sketch": "TimerCam_Camera_Only/Camera/Camera.ino",
+      "flash_status": "associated with successful upload in prior backup; no readback",
+      "pins": {
+        "D0": 32,
+        "D1": 35,
+        "D2": 34,
+        "D3": 5,
+        "D4": 39,
+        "D5": 18,
+        "D6": 36,
+        "D7": 19,
+        "XCLK": 27,
+        "PCLK": 21,
+        "VSYNC": 22,
+        "HREF": 26,
+        "SCCB_SDA": 25,
+        "SCCB_SCL": 23,
+        "RESET": 15,
+        "PWDN": -1,
+        "POWER_HOLD": 33
+      },
+      "serial_baud": 115200,
+      "jpeg": {
+        "width": 320,
+        "height": 240,
+        "quality": 12,
+        "framebuffers": 1,
+        "location": "DRAM"
+      }
+    },
+    "relay": {
+      "board": "FireBeetle ESP32",
+      "version": "1.13",
+      "sketch": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Relay.ino",
+      "flash_verified": false,
+      "serial_baud": 460800,
+      "led": {
+        "type_user_reported": "WS2813",
+        "data_gpio": 2,
+        "board_label_source_comment": "D9",
+        "pixels": 30,
+        "format": "GRB",
+        "frequency_hz": 800000,
+        "brightness": 20,
+        "pulse_ms": 350,
+        "warning_ms": 2000,
+        "power": "external regulated 5V, common ground",
+        "BI_connection": null
+      },
+      "close_only_led_trigger": false,
+      "burst": {
+        "shots": 10,
+        "interval_ms": 500
+      }
+    },
+    "lidar": {
+      "model": "STL-19P",
+      "baud": 230400,
+      "serial_format": "8N1",
+      "connection": "Mac USB bridge",
+      "direct_uart_optional": true,
+      "direct_uart_rx_gpio": null,
+      "packet_bytes": 47,
+      "beams": 12,
+      "raw_crop_deg": [
+        55,
+        215
+      ],
+      "distance_mm": [
+        30,
+        12000
+      ],
+      "coordinates": "x=r*sin(raw_angle), y=r*cos(raw_angle)"
+    }
+  },
+  "radio": {
+    "protocol": "ESP-NOW",
+    "channel": 6,
+    "encrypted": false,
+    "request_bytes": 8,
+    "reply_bytes": 236,
+    "chunk_bytes": 224,
+    "max_jpeg_bytes": 131072,
+    "camera_idle_timeout_ms": 2000,
+    "mac_source": "LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/Radio.h"
+  },
+  "detection": {
+    "close": {
+      "radius_m": [
+        0.15,
+        1.5
+      ],
+      "raw_angle_deg_min_inclusive": 55,
+      "raw_angle_deg_max_exclusive": 180,
+      "min_points": 12,
+      "min_y_span_m": 0.75,
+      "max_y_gap_m": 0.55,
+      "consecutive_scans": 2,
+      "hold_s": 2
+    },
+    "approach": {
+      "radius_min_exclusive_m": 1.5,
+      "radius_max_m": 12,
+      "geometric_angle_deg_min_inclusive": 235,
+      "geometric_angle_deg_max_exclusive": 360,
+      "x_max_m": 5,
+      "min_points": 3,
+      "min_width_m": 0.25,
+      "history_s": 0.85,
+      "evidence_window_s": 0.65,
+      "min_evidence_span_s": 0.08,
+      "min_evidence_count": 2,
+      "velocity_mps": [
+        0.6,
+        35
+      ],
+      "hold_s": 2
+    }
+  },
+  "historical_ports": {
+    "oled": "/dev/cu.usbserial-0001",
+    "lidar": "/dev/cu.usbserial-0001",
+    "relay": "/dev/cu.wchusbserial14110",
+    "camera": "/dev/cu.usbserial-2952066438"
+  },
+  "known_discrepancies": [
+    "OLED GPIO15/22 variant not verified flashed",
+    "LiDAR v1.13 build failure documented; flash not verified",
+    "Close-only event does not explicitly trigger LED in source",
+    "Approach persistence source is not one second",
+    "OLED not integrated with relay or camera",
+    "No physical readback or new build/test"
+  ]
+}

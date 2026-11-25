@@ -1,0 +1,2 @@
+# Keep the archived firmware backup byte-for-byte so its FILE_INDEX.json SHA-256 hashes stay valid.
+Firmware_Backup_v2_2026-11-25/** -text

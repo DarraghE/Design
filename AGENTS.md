@@ -4,32 +4,36 @@ These are the rules for any AI agent (or person) adding or changing code here. R
 
 ## What this project is
 
-Bike Nav: a cycling navigation and safety system. An Android phone works out the route and talks over Bluetooth LE to ESP32 modules mounted on the bike.
+Bike Nav: a cycling navigation and safety system. An Android phone works out the route. ESP32 modules on the bike show navigation (Front), detect approaching vehicles and close passes with a LiDAR and warn with lights (Rear), and photograph close passes (Camera). The overview and system diagram are in `README.md`.
 
 ## Repository layout (keep it exactly like this)
 
 ```
-README.md              Overview table of all modules and their status
+README.md              Overview table of all modules, status, system diagram
 AGENTS.md              This file
 Phone App/             Android app (Flutter) + navigation package (plain Dart)
   SPECIFICATION.md
   app/                 Flutter app
   navigation/          bike_navigation package (no Flutter imports)
   docs/                Design notes and images
-Front Module/          ESP32 handlebar display (128x64 SSD1306 OLED)
+Front Module/          ESP32 DevKit V1 handlebar display (128x64 SSD1306 OLED)
   SPECIFICATION.md
   front_module.ino
-Camera Module/         ESP32 camera
+Camera Module/         M5Stack Timer Camera X
   SPECIFICATION.md
   camera_module.ino
-Rear Module/           ESP32 rear unit (lidar, lights)
+Rear Module/           FireBeetle ESP32: LiDAR detection, LED warning, photo trigger
   SPECIFICATION.md
   rear_module.ino
-Archive/               Old repo contents. Read-only
+Tools/                 Occasional computer-side helpers (flash script, LiDAR viewer,
+                       OLED image test). Not firmware, not needed to read the modules
+Archive/               Read-only history: old repo contents, and the original
+                       firmware backup (Firmware_Backup_v2_2026-11-25/)
 ```
 
-- **Don't add new top-level folders** or rename the four module folders without being asked.
-- **Don't edit, move or delete anything in `Archive/`.** It is kept only for reference.
+- **Don't add new top-level folders** or rename the module folders without being asked.
+- **Don't edit, move or delete anything in `Archive/`.** It is kept only for reference. The firmware backup's `FILE_INDEX.json` SHA-256 hashes must keep matching.
+- Computer-side helpers (scripts, viewers, test pages) go in `Tools/`, never in a module folder. Describe each one in `Tools/README.md`.
 
 ## Rule 1: Every code change updates the specification
 
@@ -66,21 +70,25 @@ The Front, Camera and Rear Modules are flashed straight onto ESP32s, so each mus
 - The top of the file has a comment block giving: the module name, a one-line purpose, the board to select in the Arduino IDE, and **every library needed with its version** (as named in the Arduino Library Manager).
 - Put pin numbers, I2C addresses, UUIDs and tunable values as named constants near the top of the file. The spec's wiring table must match them.
 - It must compile for the ESP32 with only the listed libraries installed.
+- The Arduino IDE and arduino-cli need a sketch to sit in a folder with the same name (`rear_module/rear_module.ino`). Don't rename the module folders to fix this: the IDE offers to make the folder, and `Tools/flash_module.command` copies the file into one.
+- The existing sketches came from a firmware backup and don't all keep their constants at the top. Instead, their header comment lists the important settings. If you restructure a sketch, keep its behaviour, serial messages and version string unchanged unless you were asked to change them.
 
 The Phone App isn't limited to one file. Keep its existing structure (`app/` and `navigation/`).
 
 ## Rule 3: Keep the module contracts in sync
 
-Modules depend on each other through shared numbers. If you change one side, change the other side **and both specs** in the same commit.
+Modules and tools depend on each other through shared numbers and formats. If you change one side, change the other side **and both specs** in the same commit.
 
 | Contract | Defined in | Must match |
 |----------|-----------|------------|
-| Display symbol IDs (0–13, 21–29) | `Phone App/navigation/lib/src/symbols.dart` | `Front Module/front_module.ino` |
-| Bluetooth packet (version, flags, distance, symbols) | `Phone App/navigation/lib/src/protocol.dart` | `Front Module/front_module.ino` |
-| BLE service / characteristic UUIDs | `protocol.dart` | `front_module.ino` |
-| OLED screen layout | `Phone App/navigation/lib/src/oled.dart` (`renderOled`) | Drawing code in `front_module.ino` |
+| ESP-NOW photo protocol: channel 6, `Request` 8 bytes, `Reply` 236 bytes, 224-byte chunks, 128 KB max | `Rear Module/rear_module.ino` (`Radio.h` section) | `Camera Module/camera_module.ino` |
+| Camera's MAC address (`cameraMac`) | `rear_module.ino` | The real camera board. Update it if the camera is replaced |
+| Rear Module USB protocol (460800 baud: `V`/`C`/`P`/`R`, `0x7E` frames, `READY`/`SCAN`/`LIVE`/`JPEG`/`EVENT` lines) | `rear_module.ino` | `Tools/LiDAR Viewer/viewer.py` and `scan_wire.py` |
+| Firmware version string `READY 1.13 RADIO` | `rear_module.ino` | `Tools/LiDAR Viewer/viewer.py` |
+| OLED image packet: `OLED` + 64 + 1024 bytes, row by row, top bit = leftmost pixel | `Front Module/front_module.ino` | `Tools/OLED Image Test/` (dashboard and `sender.py`) |
+| Phone → Front Module navigation (**draft, being replaced by images**): symbol IDs, BLE packet and UUIDs, screen layout | `Phone App/navigation/lib/src/symbols.dart`, `protocol.dart`, `oled.dart` | Front Module firmware, once built |
 
-When the Camera or Rear Module gets a Bluetooth interface, add its rows to this table and to section 5 of `Phone App/SPECIFICATION.md`.
+**Planned (not built):** phone → main module (Bluetooth) → Front Module, carrying ready-drawn 128x64 images. When you build it, add rows here for the phone link, the main-module-to-front link and the frame format, and update `Phone App/SPECIFICATION.md` section 5 and the Front Module spec section 1.2.
 
 ## Rule 4: Never commit secrets
 
@@ -92,8 +100,13 @@ When the Camera or Rear Module gets a Bluetooth interface, add its rows to this 
 ## Rule 5: Test what you can, and say what you couldn't
 
 - Phone App: run `dart test` in `Phone App/navigation` and `flutter test` in `Phone App/app` after changing them.
-- ESP32 sketches: compile them for the ESP32 if you can.
+- ESP32 sketches: compile them for the ESP32 if you can, e.g. `bash Tools/flash_module.command rear --compile-only`. They were last compile-checked with ESP32 core 3.2.1 on 25 Nov 2026. On Windows the ESP32 toolchain can fail with missing `bits/...` headers when paths are long. Build from a short path (for example a `subst` drive letter).
 - If you couldn't run or test something, write that in the module spec's section 6 ("untested") and in your commit message.
+- **Compiling is not the same as working.** Only write that something works on hardware when someone has actually seen it working.
+
+## Rule 6: Report known issues, don't quietly fix them
+
+The specs list known mismatches between what was intended and what the code does. For example, a close pass on the Rear Module takes photos but doesn't flash the lights, and the Front Module's SDA pin has changed between versions. **Don't change these unless you've been asked to.** Point them out instead. When you describe behaviour, describe what the code actually does, not what was intended, and say which is which.
 
 ## Commits
 

@@ -39,7 +39,7 @@ Layout:
 - **Close turns:** only the next turn is shown. The one after it appears as soon as the rider passes the first.
 - **Flash:** when the turn is **5 m** away or less (measured along the route), the screen inverts 4 times a second until the rider has passed the turn. The firmware does this with the SSD1306 invert command (`display.invertDisplay()` in the Adafruit library), so nothing needs redrawing. With phone GPS error of 5-10 m, the flash can start a few metres early or late.
 
-`navigation/lib/src/oled.dart` draws every screen pixel for pixel (`renderOled`), and the phone app previews exactly that. The handlebar ESP32 is meant to draw the same screens itself from a small Bluetooth message (draft protocol in `protocol.dart`). Its firmware belongs in the `Front Module` folder, which is empty for now.
+`navigation/lib/src/oled.dart` draws every screen pixel for pixel (`renderOled`), and the phone app previews exactly that. The handlebar ESP32 was meant to draw the same screens itself from a small Bluetooth message (draft protocol in `protocol.dart`). The team now plans for the phone to send the drawn screens as images instead; see `Front Module/SPECIFICATION.md` section 1.2.
 
 To regenerate the pictures: `dart run tool/oled_preview.dart out_dir` writes every screen as a PBM image.
 

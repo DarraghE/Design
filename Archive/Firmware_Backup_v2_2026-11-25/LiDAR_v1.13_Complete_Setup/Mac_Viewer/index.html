@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiDAR test page v1.13</title>
+<style>
+body{font:16px system-ui;max-width:1040px;margin:3rem auto;padding:0 1rem;color:#162536;background:#f3f6fa}
+form,section{background:white;border:1px solid #d6e0eb;border-radius:12px;padding:1.2rem;margin:1rem 0}
+button,input{font:inherit}button{background:#184875;color:white;border:0;padding:.65rem .9rem;border-radius:.4rem;margin:.25rem}
+button:disabled{opacity:.45}img{max-width:100%;display:block}img[hidden]{display:none}
+pre{white-space:pre-wrap;max-height:16rem;overflow:auto;background:#172738;color:#e9f3ff;padding:1rem;border-radius:.4rem}
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.panels section{min-width:0}canvas{width:100%;height:auto;background:#172738;border-radius:.4rem} @media(max-width:680px){.panels{grid-template-columns:1fr}}
+</style>
+<h1>LiDAR test page <small>v1.13</small></h1>
+<form id="recording">
+  <label for="file">LiDAR recording</label>
+  <input id="file" type="file" accept=".lidar" required>
+  <button id="play">Play recording</button>
+  <button id="stop" type="button">Stop</button>
+  <p id="replay" role="status"></p>
+</form>
+<div class="panels">
+<section>
+  <h2>LiDAR scan</h2>
+  <canvas id="scan" width="500" height="500" aria-label="LiDAR point cloud"></canvas>
+  <p id="detection">Waiting for a recording</p>
+  <small>Yellow shows the approach zone. Red marks approaching returns. Pink marks close-pass returns.</small>
+</section>
+<section>
+  <h2>Camera and lights</h2>
+  <p id="relay" role="status">Checking relay firmware…</p>
+  <button id="photo">Test Camera</button>
+  <button id="lights">Test Lights</button>
+  <p id="status" role="status"></p>
+  <img id="image" alt="Latest captured photo" hidden>
+</section>
+</div>
+<section><h2>Debug log</h2><pre id="log"></pre></section>
+<script>
+const $ = id => document.getElementById(id);
+let photoId = 0;
+let photoTimer;
+async function request(path, body) {
+  const response = await fetch(path, {method:'POST', body, headers:{'X-Lidar-Test':'1'}});
+  const message = await response.text();
+  if (!response.ok) throw new Error(message);
+}
+async function action(path, body) {
+  try {
+    await request(path, body);
+    $('status').textContent = path === '/lights' ? 'Light test sent. See Debug log for the ESP32 result.' : 'Request accepted';
+  } catch (error) {
+    $('status').textContent = error.message;
+  }
+}
+$('recording').onsubmit = event => {
+  event.preventDefault();
+  action('/play', $('file').files[0]);
+};
+$('stop').onclick = () => action('/stop');
+$('photo').onclick = () => action('/photo');
+$('lights').onclick = () => action('/lights');
+function drawScan(scan) {
+  const canvas = $('scan');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 500, 500);
+  ctx.save();
+  ctx.translate(250, 250);
+  ctx.scale(19, -19);
+  ctx.lineWidth = 0.06;
+  ctx.strokeStyle = '#658399';
+  ctx.beginPath();
+  ctx.moveTo(-12, 0); ctx.lineTo(12, 0);
+  ctx.moveTo(0, -12); ctx.lineTo(0, 12);
+  ctx.stroke();
+  for (const radius of [1.5, 6, 12]) {
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-13, -13, 18, 26); ctx.clip();
+  const start = 235 * Math.PI / 180;
+  ctx.beginPath();
+  ctx.arc(0, 0, 12, start, 2 * Math.PI);
+  ctx.arc(0, 0, 1.5, 2 * Math.PI, start, true);
+  ctx.closePath();
+  ctx.fillStyle = '#ffd64a33'; ctx.fill();
+  ctx.strokeStyle = '#ffd64a'; ctx.stroke();
+  ctx.restore();
+  for (const [x, y, kind] of scan?.points ?? []) {
+    ctx.fillStyle = ['#9ec9e4', '#ff9cb0', '#ff4242'][kind];
+    ctx.beginPath();
+    ctx.arc(x, y, kind ? 0.13 : 0.075, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+  ctx.restore();
+  $('detection').textContent = scan ? [
+    scan.time.toFixed(2) + ' s',
+    scan.close ? 'Close pass detected by ESP32' : '',
+    scan.incoming ? 'Incoming car · ' + scan.speed + ' km/h' : '',
+    !scan.close && !scan.incoming ? 'Clear' : ''
+  ].filter(Boolean).join(' | ') : 'Waiting for a recording';
+}
+async function refresh() {
+  try {
+    const state = await (await fetch('/state', {cache:'no-store'})).json();
+    $('replay').textContent = state.replay;
+    drawScan(state.scan);
+    $('relay').textContent = state.relay;
+    $('file').disabled = state.live_usb;
+    $('play').disabled = state.playing || state.live_usb;
+    $('stop').disabled = !state.playing;
+    $('log').textContent = state.log.join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+    if (state.photo && state.photo !== photoId) {
+      photoId = state.photo;
+      const id = photoId;
+      const preview = new Image();
+      preview.onload = () => {
+        if (id !== photoId) return;
+        clearTimeout(photoTimer);
+        $('image').src = preview.src;
+        $('image').hidden = false;
+        photoTimer = setTimeout(() => {
+          $('image').hidden = true;
+          $('image').removeAttribute('src');
+        }, state.photo_duration * 1000);
+      };
+      preview.src = '/latest?' + id;
+    }
+  } catch {
+    $('replay').textContent = 'Viewer disconnected. Check Terminal.';
+  } finally {
+    setTimeout(refresh, 350);
+  }
+}
+refresh();
+</script>
+</html>

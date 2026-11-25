@@ -1,5 +1,5 @@
 // =============================================================================
-// Front Module firmware v1.21: handlebar OLED. Shows the phone's navigation
+// Front Module firmware v1.22: handlebar OLED. Shows the phone's navigation
 // screens (forwarded by the Main Module) and, when there is no phone, the
 // camera JPEGs the Main Module broadcasts.
 // =============================================================================
@@ -25,6 +25,9 @@
 //     and not drawn, so a close-pass photo burst can't cover the directions.
 //   - Still accepts the USB test picture ("OLED" + 64 + 1024 bytes, 115200
 //     baud) from Tools/OLED Image Test/.
+//
+// v1.22: everything is drawn rotated 180 degrees (screenRotation = 2),
+// because the OLED is mounted upside down on the bike.
 //
 // Settings at a glance: OLED SSD1306 128x64 at I2C 0x3C, SDA GPIO15,
 // SCL GPIO22; ESP-NOW channel 6; JPEG max 128 KB; a part-received JPEG is
@@ -145,6 +148,8 @@ class Assembler {
 // END SCREEN DECODER
 
 Adafruit_SSD1306 display(128,64,&Wire,-1);
+// v1.22: 2 = rotate 180 degrees (the OLED is mounted upside down). 0 = as v1.21.
+constexpr uint8_t screenRotation=2;
 constexpr uint32_t maxJpeg=128*1024, chunkSize=224;
 const uint8_t relayMac[]={0xd4,0x8c,0x49,0xfa,0x75,0x48};
 struct Packet {uint32_t token,offset,total; uint8_t bytes[chunkSize];};
@@ -236,6 +241,7 @@ void servicePhoneScreen(){
 void setup(){
   Serial.begin(115200);Serial.setTimeout(3000);Wire.begin(15,22);
   displayReady=display.begin(SSD1306_SWITCHCAPVCC,0x3C,false,false);
+  display.setRotation(screenRotation);  // v1.22
   if(displayReady){display.clearDisplay();display.setTextColor(SSD1306_WHITE);display.setCursor(0,0);display.println("Wireless receiver");display.display();}
   TJpgDec.setJpgScale(4);TJpgDec.setSwapBytes(false);TJpgDec.setCallback(drawBlock);
   packets=xQueueCreate(32,sizeof(Packet));
@@ -246,7 +252,7 @@ void setup(){
     radioReady=esp_now_add_peer(&peer)==ESP_OK&&esp_now_register_recv_cb(onPacket)==ESP_OK;
   }
   Serial.printf("READY display=%d radio=%d MAC=%s\n",displayReady,radioReady,WiFi.macAddress().c_str());
-  Serial.println("INFO PHONE SCREENS 1.21");  // v1.21
+  Serial.println("INFO PHONE SCREENS 1.22");  // v1.22: was 1.21
 }
 void loop(){
   Packet p;for(unsigned i=0;i<32&&packets&&xQueueReceive(packets,&p,0)==pdTRUE;i++)process(p);

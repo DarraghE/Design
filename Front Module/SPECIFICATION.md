@@ -4,9 +4,9 @@
 |---|---|
 | **Module** | Front Module: the handlebar display |
 | **Runs on** | ESP32 DevKit V1 with a 0.96" 128 × 64 SSD1306 OLED |
-| **Code file** | `front_module.ino` (Arduino sketch, **v1.21**: phone screens + wireless JPEG receiver) |
-| **Status** | **v1.21 written, not yet flashed.** It adds the phone's navigation screens to the installed v1.19 receiver. Compiles (ESP32 core 3.3.8); its screen decoder is checked on a computer against all 415 screens the phone app draws, pixel by pixel (`Tools/Phone Link Test/`). **The board still runs v1.19** (flashed 25 Nov 2026, MAC `8C:94:DF:6C:BC:80`, hash verified), which ignores the phone's screens: that is why phone → Main → Front showed nothing. |
-| **Source** | The installed v1.19 receiver (`Front/Receiver/Receiver.ino` in the team's `BikeNav_Installed_Firmware_2026-11-25` archive). Every v1.21 change is marked `v1.21:`; the screen decoder is new code between `BEGIN/END SCREEN DECODER`. The old USB-only test sketch is in `Archive/Firmware_Backup_v2_2026-11-25/OLED_GPIO15_22/` |
+| **Code file** | `front_module.ino` (Arduino sketch, **v1.22**: phone screens + wireless JPEG receiver, drawn rotated 180°) |
+| **Status** | **v1.22 installed on the front board** (flashed 25 Nov 2026 from this PC over USB, MAC `8c:94:df:6c:bc:80`, hash verified; it boots and prints `INFO PHONE SCREENS 1.22`). v1.21 added the phone's navigation screens to the old v1.19 receiver, which had ignored them; v1.22 draws everything rotated 180° for the upside-down mounting. Compiles (ESP32 core 3.3.8); the screen decoder is checked on a computer against all 415 screens the phone app draws, pixel by pixel (`Tools/Phone Link Test/`). **Not yet seen working end to end** with the phone and the Main Module. |
+| **Source** | The installed v1.19 receiver (`Front/Receiver/Receiver.ino` in the team's `BikeNav_Installed_Firmware_2026-11-25` archive). Every v1.21 change is marked `v1.21:` and the rotation `v1.22:`; the screen decoder is new code between `BEGIN/END SCREEN DECODER`. The old USB-only test sketch is in `Archive/Firmware_Backup_v2_2026-11-25/OLED_GPIO15_22/` |
 
 ## 1. What this module does
 
@@ -28,6 +28,10 @@
 | 6 | **v1.21:** not drawn, because the phone's screens are showing (a screen arrived in the last 10 s) |
 
 It also still accepts the **USB test picture** (`OLED` + 64 + 1024 pixel bytes, section 2.1) from `Tools/OLED Image Test/`.
+
+### 1.0 Screen orientation (v1.22)
+
+The OLED is mounted upside down on the bike, so since v1.22 everything is drawn **rotated 180°** (`display.setRotation(screenRotation)`, `screenRotation = 2`): phone screens, "NO PHONE", camera photos and the USB test picture. The phone and Main Module still send normal, upright frames. If the screen is ever mounted the other way, set `screenRotation = 0`.
 
 ### 1.2 Phone navigation screens (new in v1.21)
 
@@ -61,7 +65,7 @@ Total **1029 bytes**. There's no checksum.
 
 | Reply | Meaning |
 |-------|---------|
-| `READY display=<0/1> radio=<0/1> MAC=…` then `INFO PHONE SCREENS 1.21` | Started (sent once at power-up) |
+| `READY display=<0/1> radio=<0/1> MAC=…` then `INFO PHONE SCREENS 1.22` | Started (sent once at power-up) |
 | `INFO NO PHONE` | Phone screens stopped for 10 s |
 | `DISPLAY_ERROR` | Picture received but the screen wasn't found at 0x3C |
 | `HEIGHT_ERROR` | Byte after `OLED` wasn't 64 |
@@ -120,22 +124,24 @@ The Front Module doesn't talk to the phone directly.
 - **Arduino IDE:** open `front_module.ino` (click OK when it offers to make a `front_module` folder), set the board and port, then Upload.
 - **Mac script:** `bash Tools/flash_module.command front PORT`
 - **Check it works:**
-  1. Serial monitor at 115200, reset the board: `READY display=1 radio=1 MAC=8C:94:DF:6C:BC:80`, `INFO PHONE SCREENS 1.21`, and "Wireless receiver" on the screen.
+  1. Serial monitor at 115200, reset the board: `READY display=1 radio=1 MAC=8C:94:DF:6C:BC:80`, `INFO PHONE SCREENS 1.22`, and "Wireless receiver" (the right way up on the mounted screen) on the screen.
   2. Connect the phone app to the Main Module: within 3 s the screen shows the app's screen ("READY / CLOSE PASS ON", or the navigation screen). Close the app: "NO PHONE" after 10 s.
   3. With the phone disconnected (after "NO PHONE"), on the Main Module send `T` (test image) or `P` (camera photo): the picture appears and the Main Module prints `DEBUG DISPLAY_ACK … 1 …`. With the phone connected the ack status is 6 (not drawn).
   4. Or send a picture with `Tools/OLED Image Test/`: `DISPLAYED`.
 
 ## 6. Known gaps and next steps
 
-1. **Flash v1.21.** The board still runs v1.19, which ignores the phone's screens. Not yet tested on the board: drawing speed, flashing, and "NO PHONE".
-2. **v1.19 vs v1.20:** the installed build was labelled v1.20 but only the v1.19 source exists; v1.21 is built on the v1.19 source.
-3. **Photos during navigation:** decided in v1.21: not drawn while phone screens arrive (status 6). If the team wants photos on the screen, change `process()`.
-4. GPIO15 (SDA) is a boot-mode pin. If the board won't start or upload with the screen connected, move SDA to GPIO21 and change `Wire.begin(15,22)`.
-5. Brightness/contrast for daylight, battery level and mounting aren't done.
+1. **Check on the bike:** v1.22 is flashed, but phone screens arriving through the Main Module, flashing, "NO PHONE" and the 180° rotation haven't been seen on the screen yet.
+2. **Upload needs the BOOT button:** this board doesn't enter upload mode from the PC by itself. Hold BOOT until writing starts, then **let go** (if it is still held at the reset, the board waits in upload mode).
+3. **MAC shows as zeros:** the `READY` line prints `MAC=00:00:00:00:00:00` (inherited from v1.19: it reads the address too early). The real address is `8c:94:df:6c:bc:80`; nothing depends on the printed value.
+4. **v1.19 vs v1.20:** the installed build was labelled v1.20 but only the v1.19 source exists; v1.21 is built on the v1.19 source.
+5. **Photos during navigation:** decided in v1.21: not drawn while phone screens arrive (status 6). If the team wants photos on the screen, change `process()`.
+6. GPIO15 (SDA) is a boot-mode pin. If the board won't start or upload with the screen connected, move SDA to GPIO21 and change `Wire.begin(15,22)`.
+7. Brightness/contrast for daylight and battery level aren't done.
 
 ## 7. Notes for AI assistants
 
-- v1.21 is not yet on the board (v1.19 is). Keep the repo in step with what is on the board, and say in the Status line which version is installed.
+- v1.22 is on the board. Keep the repo in step with what is on the board, and say in the Status line which version is installed.
 - **The `screen` namespace between `// BEGIN SCREEN DECODER` and `// END SCREEN DECODER` must stay plain C++** (no Arduino calls): `Tools/Phone Link Test/run_test.py` compiles it on a computer and checks it against the phone app's 415 screens. Run it after any change.
 - The 236-byte packet and the 16-byte ack must match `Main Module/main_module.ino` (`Reply`, `DisplayAck`, `forwardDisplay`, `readImageByte`). The USB test picture must match `Tools/OLED Image Test/`.
 - The `0x10` screen format must match `Phone App/navigation/lib/src/display_codec.dart`. Change both in the same commit, with this spec and `Phone App/SPECIFICATION.md` sections 3.5 and 9.

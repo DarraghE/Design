@@ -1,7 +1,7 @@
 name: bike_app
 description: "Bike Nav: handlebar navigation and close-pass recording for the Design project bike."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.14.0

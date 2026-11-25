@@ -20,7 +20,7 @@ class PlaceSearch {
 
   Future<List<Place>> search(String text, {LatLng? near}) async {
     if (text.trim().length < 3) return const [];
-    final uri = Uri.https('api.openrouteservice.org', '/geocode/autocomplete', {
+    final uri = Uri.https(orsHost, '/pelias/v1/autocomplete', {
       'api_key': apiKey,
       'text': text,
       'boundary.country': 'IE',
@@ -28,6 +28,9 @@ class PlaceSearch {
       if (near != null) 'focus.point.lon': '${near.lng}',
     });
     final res = await _http.get(uri).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw Exception('OpenRouteService rejected the key. Check it in Settings.');
+    }
     if (res.statusCode != 200) {
       throw Exception('Place search failed (${res.statusCode})');
     }

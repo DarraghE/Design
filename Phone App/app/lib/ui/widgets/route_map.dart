@@ -73,13 +73,14 @@ class _RouteMapState extends State<RouteMap> {
       ),
       children: [
         if (widget.tiles)
-          // CARTO "dark matter" tiles: OpenStreetMap data, free for
-          // non-commercial use with attribution, no key.
+          // Standard OpenStreetMap tiles, darkened on the phone. No key.
+          // (CARTO's dark tiles needed a key from late 2026.) Light use like
+          // this is within the OSM tile policy as long as the app is named
+          // in the user agent and the attribution is shown.
           TileLayer(
-            urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            subdomains: const ['a', 'b', 'c', 'd'],
-            retinaMode: RetinaMode.isHighDensity(context),
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
             userAgentPackageName: 'ie.tcd.design.bike_app',
+            tileBuilder: darkModeTileBuilder,
             maxZoom: 19,
           ),
         if (route != null)
@@ -116,7 +117,7 @@ class _RouteMapState extends State<RouteMap> {
             alignment: Alignment.bottomRight,
             child: Padding(
               padding: EdgeInsets.all(6),
-              child: Text('© OpenStreetMap contributors © CARTO', style: TextStyle(fontSize: 10, color: Palette.muted)),
+              child: Text('© OpenStreetMap contributors', style: TextStyle(fontSize: 10, color: Palette.muted)),
             ),
           ),
       ],

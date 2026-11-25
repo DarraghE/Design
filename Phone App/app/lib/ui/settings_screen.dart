@@ -2,6 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app.dart';
 import '../closepass/incident.dart';
+import 'package:bike_navigation/bike_navigation.dart' show OrsClient;
+
 import '../closepass/plate_reader.dart';
 import '../closepass/uploader.dart';
 import '../link/protocol.dart';
@@ -20,7 +22,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _ors, _openAi, _model, _url, _token;
   bool _init = false;
-  String? _openAiCheck, _uploadCheck;
+  String? _orsCheck, _openAiCheck, _uploadCheck;
   bool _checking = false;
 
   @override
@@ -57,6 +59,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await app.closePass.resumePending();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
+    }
+  }
+
+  Future<void> _checkOrs() async {
+    await _save();
+    if (!mounted) return;
+    setState(() {
+      _checking = true;
+      _orsCheck = null;
+    });
+    final result = await OrsClient(apiKey: AppScope.of(context).settings.orsKey).check();
+    if (mounted) {
+      setState(() {
+        _checking = false;
+        _orsCheck = result ?? 'Key works. Routes and place search are ready.';
+      });
     }
   }
 
@@ -134,14 +152,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 22),
           const SectionLabel('Navigation'),
           _field(_ors, 'OpenRouteService API key', secret: true,
-              help: 'Free at openrouteservice.org. Used for cycling routes and place search.'),
+              help: 'Free: sign up at account.heigit.org, then copy the key from its dashboard. Used for cycling routes and place search.'),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: _checking ? null : _checkOrs, child: const Text('Check routing key')),
+          if (_orsCheck != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_orsCheck!, style: const TextStyle(color: Palette.muted))),
           const SizedBox(height: 22),
           const SectionLabel('Number plates (OpenAI)'),
           _field(_openAi, 'OpenAI API key', secret: true, help: 'Your own key from platform.openai.com. Photos are sent to OpenAI only to read the plate.'),
           const SizedBox(height: 10),
           _field(_model, 'Model', help: 'A vision model, e.g. ${Settings.defaultModel}, gpt-4.1-mini or gpt-4o.'),
           const SizedBox(height: 8),
-          OutlinedButton(onPressed: _checking ? null : _checkOpenAi, child: const Text('Check key')),
+          OutlinedButton(onPressed: _checking ? null : _checkOpenAi, child: const Text('Check OpenAI key')),
           if (_openAiCheck != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_openAiCheck!, style: const TextStyle(color: Palette.muted))),
           const SizedBox(height: 22),
           const SectionLabel('Website'),

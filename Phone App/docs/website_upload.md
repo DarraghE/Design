@@ -46,7 +46,7 @@ The test upload from Settings sends only `incident`, with `"simulated": true` an
   "bestPhoto": 2,
   "photoOffsetsMs": [300, 600, 900, 1200, 1500],
   "simulated": false,
-  "app": "BikeNav Android 1.0.0"
+  "app": "BikeNav Android 1.0.1"
 }
 ```
 

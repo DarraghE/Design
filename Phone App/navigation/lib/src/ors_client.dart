@@ -5,6 +5,10 @@ import 'package:http/http.dart' as http;
 import 'geo.dart';
 import 'route.dart';
 
+/// Where OpenRouteService lives. The old api.openrouteservice.org address was
+/// switched off on 24 Nov 2026; existing keys work unchanged here.
+const orsHost = 'api.heigit.org';
+
 /// OpenRouteService directions client (provider chosen in N1, see
 /// docs/navigation.md).
 ///
@@ -21,7 +25,7 @@ class OrsClient {
 
   /// Requests a cycling route. Usable directly as a [RouteProvider].
   Future<NavRoute> route(LatLng from, LatLng to) async {
-    final uri = Uri.parse('https://api.openrouteservice.org/v2/directions/$profile/geojson');
+    final uri = Uri.https(orsHost, '/openrouteservice/v2/directions/$profile/geojson');
     final res = await _http.post(
       uri,
       headers: {
@@ -38,11 +42,27 @@ class OrsClient {
         'language': 'en',
         'units': 'm',
       }),
-    );
+    ).timeout(const Duration(seconds: 20));
     if (res.statusCode != 200) {
       throw OrsException(res.statusCode, res.body);
     }
     return parseOrsGeoJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  /// Asks for a short route across Dublin. Returns null if the key works,
+  /// otherwise a short reason.
+  Future<String?> check() async {
+    if (apiKey.trim().isEmpty) return 'Enter a key first.';
+    try {
+      await route(const LatLng(53.3438, -6.2546), const LatLng(53.3398, -6.2593));
+      return null;
+    } on OrsException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) return 'OpenRouteService rejected this key (${e.statusCode}).';
+      if (e.statusCode == 429) return 'The key works but its daily limit is used up.';
+      return 'OpenRouteService error ${e.statusCode}.';
+    } catch (e) {
+      return 'Could not reach OpenRouteService: $e';
+    }
   }
 }
 

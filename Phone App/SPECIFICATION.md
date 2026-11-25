@@ -5,8 +5,8 @@
 | **Module** | Phone App ("Bike Nav") |
 | **Runs on** | Android phone (built and laid out for a Google Pixel 9a; needs Android 7.0 / API 24 or newer, 64-bit, with Bluetooth LE) |
 | **Language** | Dart / Flutter 3.50.1 |
-| **Install file** | [`release/BikeNav.apk`](release/BikeNav.apk), version 1.0.0, 18.9 MB, SHA-256 `defac7e86a36029983280ed17a796698ab0318a6d1ef3be106e583e2b3ccbd57` (see section 6) |
-| **Status** | **App complete and tested in software (77 automated tests pass).** It works end to end with the built-in demo Main Module. **Not yet tested with real hardware:** the Main Module and Front Module firmware for the Bluetooth link don't exist yet (sections 8 and 9 say exactly what to add). Plate reading needs your OpenAI key; uploading needs the website address. |
+| **Install file** | [`release/BikeNav.apk`](release/BikeNav.apk), version 1.0.1, 18.9 MB, SHA-256 `c933185687cabd22272be50f7afaeb7fe372a73530194e924a5a88cbc8de3309` (see section 6) |
+| **Status** | **App complete and tested in software (81 automated tests pass).** It works end to end with the built-in demo Main Module. **Not yet tested with real hardware:** the Main Module and Front Module firmware for the Bluetooth link don't exist yet (sections 8 and 9 say exactly what to add). Plate reading needs your OpenAI key; uploading needs the website address. |
 
 ## 1. What the app does
 
@@ -36,7 +36,7 @@ The app has two modes and talks to one thing on the bike, the **Main Module**, o
 | **Navigation** | Planning: dark map, "Where to?" search (Ireland), or long-press the map; route card with distance, time and turns; **Start navigation**; "Simulate the ride (demo)". Riding: big handlebar preview, the next instruction ("then …" for a second close turn), whether frames are being sent, the map following the rider, End/Done. |
 | **Recordings** | Every close pass, newest first: best photo, plate, distance and speed, time, upload state. |
 | **Incident** | Distance, vehicle speed and location; **animated LiDAR reconstruction** (play/pause, scrub, ¼×/½×/1×); the plate drawn as a plate with confidence and vehicle description; "Read plate / Read again"; the photos (tap to zoom, the best plate photo highlighted); website upload state, "Upload to website", copy link; delete. |
-| **Settings** | Main Module; OpenRouteService key; OpenAI key + model + **Check key**; website upload address + token + **Send a test upload**; licences. |
+| **Settings** | Main Module; OpenRouteService key + **Check routing key**; OpenAI key + model + **Check OpenAI key**; website upload address + token + **Send a test upload**; licences. |
 
 ### 1.1.1 Screenshots
 
@@ -102,7 +102,7 @@ Phone App/
     │   ├── services/                        location (GPS), place_search (ORS geocoding)
     │   └── ui/                              screens, theme, demo photos, widgets (lcd_preview,
     │                                        lidar_replay, route_map)
-    ├── test/                                41 app tests (see section 7)
+    ├── test/                                45 app tests (see section 7)
     └── android/                             permissions, app id ie.tcd.design.bike_app
 ```
 
@@ -169,7 +169,7 @@ Measured on all 415 test screens: **average 208 bytes, largest 429 bytes** (from
 | | |
 |---|---|
 | Endpoint | `POST https://api.openai.com/v1/chat/completions` with `Authorization: Bearer <your key>` |
-| Model | Settings → Model, default **`gpt-4.1`** (any vision model with structured outputs: `gpt-4.1-mini`, `gpt-4o`, …). **Check key** calls `GET /v1/models/<model>` |
+| Model | Settings → Model, default **`gpt-4.1`** (any vision model with structured outputs: `gpt-4.1-mini`, `gpt-4o`, …). **Check OpenAI key** calls `GET /v1/models/<model>` |
 | Input | System prompt + a short text (time, LiDAR distance and speed, each photo's time) + every photo as a base64 data URL, `detail: high` |
 | Output | Strict JSON schema: `plate_found, plate, plate_country (IE/UK/OTHER/UNKNOWN), confidence, best_image, vehicle_type, vehicle_colour, vehicle_make, notes` |
 | Cost | About 5 × 255 image tokens + ~900 text tokens per close pass |
@@ -187,7 +187,9 @@ Clear messages for: no key, wrong key (401), model not available (404), out of c
 1. On the phone, open this repository on GitHub, go to `Phone App/release/BikeNav.apk` and tap **Download** (or copy the file over USB).
 2. Open the downloaded file. Android asks to allow installing from this source (Chrome or Files): allow it, go back and tap **Install**. Google Play Protect may warn that it doesn't know the app; choose **Install anyway**. This happens because the app is self-signed rather than from the Play Store.
 3. Open **Bike Nav** and allow **Location** and **Nearby devices** (Bluetooth) when asked.
-4. **Settings** → paste the **OpenRouteService** key (free at openrouteservice.org) and your **OpenAI** key, tap **Check key**, then **Save**. Add the website address later.
+4. **Settings** → paste the **OpenRouteService** key and tap **Check routing key**; paste your **OpenAI** key and tap **Check OpenAI key**; then **Save**. Add the website address later.
+   - **Getting the routing key (free, no card):** sign up at [account.heigit.org](https://account.heigit.org) (HeiGIT runs OpenRouteService), then copy the key from the dashboard. Older keys from openrouteservice.org still work.
+   - **The map needs no key.** It uses OpenStreetMap tiles, darkened on the phone.
 5. Home → tap the Main Module card → tap **BikeNav Main** (or **Use the demo module** to try everything without hardware: then **Simulate pass** on the Close Pass card, or **Simulate the ride** in Navigation).
 
 **With USB debugging:** `adb install -r "Phone App/release/BikeNav.apk"`.
@@ -237,9 +239,9 @@ Not covered by tests: real Bluetooth radio behaviour, real GPS, live OpenRouteSe
 
 1. **No hardware link yet:** sections 8 and 9 must be built before the phone can drive the real bike. Until then, the demo module exercises the identical code path.
 2. **Screen off / app in background:** while **navigating**, GPS runs as a foreground service (a "Bike Nav is navigating" notification), so directions keep going to the handlebar with the screen off. **Close Pass mode on its own** (not navigating) only runs while the app is open or recently used. Android may pause it in the background, so for rides without navigation keep the app open, or add a foreground service for the Bluetooth link (task P6).
-3. **Live services untested from here:** real OpenRouteService routes (a saved Dublin route is used in tests), OpenAI plate reading on real camera photos, and the website (not built yet).
+3. **Live services untested from here:** real OpenRouteService routes (OpenRouteService moved to `api.heigit.org` on 24 Nov 2026; the app uses the new address, which was checked to answer, but not with a real key) (a saved Dublin route is used in tests), OpenAI plate reading on real camera photos, and the website (not built yet).
 4. **Plate reading is only as good as the photos:** QVGA (320×240) photos of a moving car are small, so the camera resolution may need raising for reliable plates. The app reports honest confidence and never auto-uploads an unsure plate.
-5. **Licences:** flutter_blue_plus is used under its **non-profit/educational** licence (`License.nonprofit`); a commercial product needs its paid licence. Map tiles are © OpenStreetMap contributors and © CARTO (free for non-commercial use).
+5. **Licences:** flutter_blue_plus is used under its **non-profit/educational** licence (`License.nonprofit`); a commercial product needs its paid licence. Map tiles come from the OpenStreetMap tile server (© OpenStreetMap contributors). Its usage policy allows light use like this app's as long as the app identifies itself and shows attribution, both of which it does. A product with many users must switch to a paid or self-hosted tile provider.
 6. Demo photos show a made-up plate (`262-D-12345`), and demo incidents are marked "simulated" in the app and in uploads.
 
 ## 11. Notes for AI assistants

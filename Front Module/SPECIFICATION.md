@@ -29,17 +29,7 @@ The phone works out the turn-by-turn directions and **draws each screen as an im
  draws 128x64 frames                 forwards frames at once            shows frames
 ```
 
-Today's image receiver is the starting point for this: it already shows whole 128 × 64 frames. **Still to decide:**
-
-| Question | Notes |
-|----------|-------|
-| Phone → Main Module link | The team leans towards Bluetooth. Not built on either side |
-| Main Module → Front Module link | ESP-NOW fits: the Main Module already uses it for the camera, and a 1024-byte frame is 5 ESP-NOW packets of up to 250 bytes |
-| Bit order of the 1024 bytes | The receiver expects **row by row, leftmost pixel in the top bit** (Adafruit `drawBitmap`). The phone's `OledFrame.toSsd1306()` produces the SSD1306's **page layout** (8 rows per byte, top pixel in bit 0). Pick one format and convert on one side |
-| Compression | Raw frames are only 1024 bytes. Compression is optional |
-| Flashing at 5 m | The phone's current design flashes the screen by inverting it 4 times a second. With images, the phone can send inverted frames, or the protocol can carry a flash flag |
-
-This replaces the earlier draft in `Phone App/SPECIFICATION.md` section 5, where the phone sends symbol numbers and the Front Module draws the arrows itself. The phone code still implements that earlier draft. A Bluetooth firmware for it exists in `spidermannn3000/Design-group` (`front-module/`), but it isn't used here.
+**Decided and built on the phone side (25 Nov 2026):** the Phone App sends every screen as a compressed 128 × 64 frame in `0x10` display packets: row-by-row bytes (leftmost pixel in the top bit), each row XORed with the row above, then PackBits, in chunks of ≤ 180 bytes. The Main Module forwards these packets unchanged over ESP-NOW. The exact format is in `Phone App/SPECIFICATION.md` section 3.5, and the work list for this module is in section 9 there (summarised in section 8 below). Today's USB image receiver already draws whole frames in the same row-by-row layout, so the change is mostly: receive by ESP-NOW instead of USB, then decompress.
 
 ## 2. Interfaces
 
@@ -71,8 +61,8 @@ Total **1029 bytes**. There's no checksum.
 |---------|--------|-----------------------------|
 | Start the OLED (SSD1306, I2C 0x3C, SDA 15, SCL 22) | Written, not confirmed on hardware | `setup()` |
 | Receive and show a 128 × 64 image over USB | Written, not confirmed on hardware | `loop()` |
-| Receive images from the Main Module | **Not started** (planned) | — |
-| Link to the Main Module | **Not started** (ESP-NOW suggested) | — |
+| Receive compressed frames from the Main Module (ESP-NOW) | **Not started** (format fixed, see section 8) | — |
+| Flash (invert 4×/s) when the frame's flag is set | **Not started** | — |
 | Brightness for daylight, battery reading | **Not started** | — |
 
 ## 4. Hardware and wiring
@@ -110,7 +100,7 @@ Total **1029 bytes**. There's no checksum.
 
 1. **Not confirmed on hardware.** This GPIO15 version was never confirmed flashed. The older GPIO21 version uploaded on 25 Nov 2026, but the screen wasn't confirmed.
 2. **Confirm the real SDA pin** (15 or 21) and update `Wire.begin` and section 4.
-3. **Build the planned navigation path** (section 1.2): choose the Main Module → Front Module link and the frame format.
+3. **Build the navigation path** (section 8): receive the phone's frames from the Main Module by ESP-NOW.
 4. Brightness/contrast for daylight, battery level and mounting aren't done.
 5. Old versions are in `Archive/Firmware_Backup_v2_2026-11-25/` (`OLED_Test_v1/` is the GPIO21 version). The Bluetooth symbol-based firmware is in `spidermannn3000/Design-group`.
 
@@ -120,3 +110,16 @@ Total **1029 bytes**. There's no checksum.
 - When building the navigation link, write the chosen frame format and link into section 2 here, into `Phone App/SPECIFICATION.md` section 5, and into `Main Module/SPECIFICATION.md`, all in the same commit.
 - The code body is the backup's original compact style. If you rewrite it for readability, keep the behaviour and the serial replies the same.
 - Keep the sketch as one file.
+
+## 8. To add: showing the phone's frames (brief for whoever writes it)
+
+**Not built yet.** Full steps: `Phone App/SPECIFICATION.md` section 9. In short:
+
+1. Receive ESP-NOW packets from the Main Module only.
+2. Packets starting with `0x10`: `[0x10][frame#][chunk index][chunk count][flags][data]`. Collect every chunk of one frame number; a new frame number starts over.
+3. Join the chunks in order and **PackBits-decode** them (header h < 128: copy h+1 bytes; h > 128: repeat the next byte 257−h times). You must get exactly 1024 bytes.
+4. **Undo the row XOR:** `for (i = 16; i < 1024; i++) buf[i] ^= buf[i - 16];`
+5. `display.clearDisplay(); display.drawBitmap(0, 0, buf, 128, 64, SSD1306_WHITE); display.display();`
+6. flags bit 0 set: toggle `display.invertDisplay()` every 125 ms until a frame without it arrives.
+7. Nothing for 10 s: show "NO PHONE".
+8. Check against the test vectors from `Phone App/navigation`: `dart run tool/export_screens.dart out` writes the exact packets for 415 screens and what each must look like.

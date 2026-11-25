@@ -10,7 +10,7 @@
 
 ## 1. What this module does
 
-The camera is a wireless photo server. It does nothing until another ESP32 asks it for a photo over **ESP-NOW**. Right now that's the Main Module, which asks for a burst of 10 photos after each close pass. The camera then:
+The camera is a wireless photo server. It does nothing until another ESP32 asks it for a photo over **ESP-NOW**. Right now that's the Main Module, which asks for a burst of 10 photos after each close pass. With the phone link (`Phone App/SPECIFICATION.md` section 8), this becomes **5 photos**, which the Main Module sends on to the phone for number-plate reading. The camera firmware doesn't need to change for that. The camera then:
 
 1. throws away the old buffered frame and takes a **fresh** photo: JPEG, **320 × 240**, quality 12;
 2. sends it back in **224-byte chunks**, one chunk per request;

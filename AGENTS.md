@@ -92,15 +92,18 @@ Modules and tools depend on each other through shared numbers and formats. If yo
 | Main Module USB protocol (460800 baud: `V`/`C`/`P`/`R`, `0x7E` frames, `READY`/`SCAN`/`LIVE`/`JPEG`/`EVENT` lines) | `main_module.ino` | `Tools/LiDAR Viewer/viewer.py` and `scan_wire.py` |
 | Firmware version string `READY 1.13 RADIO` | `main_module.ino` | `Tools/LiDAR Viewer/viewer.py` |
 | OLED image packet: `OLED` + 64 + 1024 bytes, row by row, top bit = leftmost pixel | `Front Module/front_module.ino` | `Tools/OLED Image Test/` (dashboard and `sender.py`) |
-| Phone → Front Module navigation (**draft, being replaced by images**): symbol IDs, BLE packet and UUIDs, screen layout | `Phone App/navigation/lib/src/symbols.dart`, `protocol.dart`, `oled.dart` | Front Module firmware, once built |
+| Phone ↔ Main Module Bluetooth LE (service/characteristic UUIDs, message types `0x10 0x30 0x40 0xA1 0xB1-B3 0xC1`, CRC-32) | `Phone App/app/lib/link/protocol.dart` | Main Module firmware (to build: `Phone App/SPECIFICATION.md` §8) |
+| Close-pass package `CPK1` (photos + LiDAR clip) | `Phone App/app/lib/link/close_pass_package.dart` | Main Module firmware; the website's `lidar` file |
+| Handlebar frame format (row-major, row XOR, PackBits, `0x10` chunks) | `Phone App/navigation/lib/src/display_codec.dart` | Front Module firmware (to build: `Phone App/SPECIFICATION.md` §9); Main Module forwards it unchanged |
+| Website upload (multipart: `incident` JSON, `image`, `photos`, `lidar`) | `Phone App/app/lib/closepass/uploader.dart` | The website (`Phone App/docs/website_upload.md`) |
 
-**Planned (not built):** Phone App → Main Module (Bluetooth planned) → Front Module, carrying ready-drawn 128x64 images. When you build it, add rows here for the phone link, the main-module-to-front link and the frame format, and update `Phone App/SPECIFICATION.md` section 5 and the Front Module spec section 1.2.
+The in-app demo Main Module (`Phone App/app/lib/link/demo_main_module.dart`) implements the Main Module side of these contracts. Keep it in step with any change.
 
 ## Rule 4: Never commit secrets
 
 - **No API keys, passwords or tokens in any file**, including free-tier keys. This repository is public.
-- OpenRouteService key: passed at build time with `--dart-define=ORS_API_KEY=...`.
-- Google Maps key: `Phone App/app/android/local.properties` (`MAPS_API_KEY=...`), which git ignores.
+- OpenRouteService key: typed into the app's Settings (or `--dart-define=ORS_API_KEY=...` for a private build only).
+- OpenAI key and website token: typed into the app's Settings on the phone, never in code, build files or a committed APK.
 - Wi-Fi passwords or cloud keys for the ESP32 modules must not be committed either. Leave a placeholder constant such as `const char* WIFI_PASSWORD = "CHANGE_ME";` and explain in the spec where the real value goes.
 
 ## Rule 5: Test what you can, and say what you couldn't

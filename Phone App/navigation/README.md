@@ -11,7 +11,8 @@ Design notes, the provider comparison, the symbol table and the OLED screen desi
 | `lib/src/session.dart` | N5 | One ride: requests the route and reroutes when off-route |
 | `lib/src/junctions.dart` | N4 | Finds side-road junctions from OpenStreetMap (Overpass API) |
 | `lib/src/symbols.dart` | N6 | Manoeuvre to display symbol ID table |
-| `lib/src/oled.dart` | F2 | Draws the 128x64 OLED handlebar screen |
+| `lib/src/oled.dart` | F2 | Draws every 128x64 handlebar screen (navigation, close-pass alert, idle, messages) |
+| `lib/src/display_codec.dart` | | Compresses a screen (row XOR + PackBits) into the display packets sent to the Main Module |
 | `lib/src/replay.dart`, `bin/replay.dart` | N7 | Replays a GPX track or a simulated ride |
 | `lib/src/geo.dart` | | Distances and snapping a GPS fix onto the route |
 
@@ -45,7 +46,7 @@ Future<void> startRide(LatLng destination) async {
     locationSettings: const LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 2),
   ).listen((p) async {
     final state = await session.onPosition(LatLng(p.latitude, p.longitude), accuracyM: p.accuracy);
-    // P5: send state.symbols (and state.distanceToNextM) to the front module over BLE.
+    // The app draws renderOled(state) and sends it with encodeDisplayPackets().
     // UI: show state.next?.instruction and state.distanceToNextM.
   });
 }

@@ -1,27 +1,40 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'screens/destination_screen.dart';
-import 'services/front_module.dart';
+import 'app.dart';
+import 'ui/theme.dart';
 
-void main() {
-  runApp(BikeApp(frontModule: PreviewFrontModule()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const _Boot());
 }
 
-class BikeApp extends StatelessWidget {
-  final FrontModule frontModule;
-  const BikeApp({super.key, required this.frontModule});
+/// Loads settings and recordings, then shows the app.
+class _Boot extends StatefulWidget {
+  const _Boot();
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bike Nav',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF1565C0)),
-      darkTheme: ThemeData(
-        colorSchemeSeed: const Color(0xFF1565C0),
-        brightness: Brightness.dark,
-      ),
-      home: DestinationScreen(frontModule: frontModule),
-    );
-  }
+  State<_Boot> createState() => _BootState();
+}
+
+class _BootState extends State<_Boot> {
+  late final Future<AppServices> _services = AppServices.create();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<AppServices>(
+        future: _services,
+        builder: (context, snap) {
+          if (snap.hasData) return BikeNavApp(services: snap.data!);
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(),
+            home: Scaffold(
+              body: Center(
+                child: snap.hasError
+                    ? Padding(padding: const EdgeInsets.all(24), child: Text('Could not start: ${snap.error}'))
+                    : const CircularProgressIndicator(),
+              ),
+            ),
+          );
+        },
+      );
 }

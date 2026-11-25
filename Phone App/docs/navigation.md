@@ -22,7 +22,7 @@ Code: `Phone App/navigation/` is a plain Dart package (no Flutter imports), so i
 | OSRM | `bike` only on self-hosted or community servers | Free, but the community server forbids heavy or app use | Same format as Mapbox | **Structured** (`exit`) | Would need our own server |
 | Google Routes API | `BICYCLE` | Monthly free allowance, billing account required | `TURN_LEFT`, `TURN_SLIGHT_LEFT`, `TURN_SHARP_LEFT`, `UTURN_LEFT`, `ROUNDABOUT_LEFT`, `STRAIGHT`, `MERGE`, `FORK_*`, `RAMP_*`, ... | **Text only** ("take the 2nd exit"), so it would have to be parsed out of the instruction | Check cycling coverage in Ireland before relying on it |
 
-**Decision:** OpenRouteService for routing. It has a cycling profile, a free tier with no card, and the roundabout exit number as a structured field. The app keeps Google Maps (`google_maps_flutter`) to draw the map and Google Places for destination search (P3). The route line from ORS is drawn on the Google map.
+**Decision:** OpenRouteService for routing. It has a cycling profile, a free tier with no card, and the roundabout exit number as a structured field. Update 25 Nov 2026: the app now draws the map with OpenStreetMap data (flutter_map with CARTO dark tiles, no key) and uses OpenRouteService for place search too, so only one key is needed.
 
 Prices and limits change, so recheck them when signing up. Keep the ORS key out of GitHub (pass it with `--dart-define=ORS_API_KEY=...`, the same approach as the OpenAI key in C1).
 
@@ -44,6 +44,8 @@ Layout:
 To regenerate the pictures: `dart run tool/oled_preview.dart out_dir` writes every screen as a PBM image.
 
 ## N6: symbol IDs
+
+> Since 25 Nov 2026 these IDs no longer go over Bluetooth: the phone draws each screen itself and sends the image. They are still used inside `engine.dart` and `oled.dart`.
 
 These IDs go over Bluetooth (S4). They say which screen to draw. The distance and the flash flag are sent alongside them.
 
@@ -94,5 +96,5 @@ dart run bin/replay.dart --route my_route.json --gpx my_ride.gpx --mode junction
 - ~~Get an ORS key and make one real Dublin request.~~ Done: Trinity College to St Patrick's Cathedral (1.7 km) parsed correctly and is saved as `test/fixtures/dublin_trinity_to_st_patricks.json`. A route with a roundabout is still needed to check `exit_number`.
 - Test the Overpass junction query from a laptop or phone. Both overpass-api.de and overpass.kumi.systems block the cloud build machine. Use `--overpass` on the replay tool to try another server.
 - Record a real ride as GPX and replay it at all three levels to tune the 100 m, 10 m and 30 m values.
-- Agree the symbol IDs and screen layout with whoever does F2, then copy them into the S4 protocol spec.
+- ~~Agree the symbol IDs and screen layout with whoever does F2.~~ Superseded: the phone now sends finished screen images (see `../SPECIFICATION.md` section 3.5), so the symbol IDs are only used inside the phone.
 - Decide whether the module draws the screens itself or receives ready-made frames (part of S4).

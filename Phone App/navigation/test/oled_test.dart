@@ -113,25 +113,22 @@ void main() {
     expect(b[7 * 128 + 127], 1 << 7);
   });
 
-  test('Bluetooth packet (draft protocol v1)', () {
-    final s = NavState(
-      next: Manoeuvre(
-          kind: ManoeuvreKind.roundabout,
-          instruction: '',
-          pointIndex: 0,
-          alongM: 0,
-          exitNumber: 2),
-      distanceToNextM: 300.4,
-      showTurn: true,
-      symbols: const [9, 22],
-      offRoute: false,
-      arrived: false,
-      flash: true,
-      alongM: 0,
-      offsetM: 0,
-    );
-    expect(encodeNavPacket(s), [1, 1, 0x2C, 0x01, 2, 9, 22]); // 300 m = 0x012C
-    expect(encodeNavPacket(null), [1, 0, 0xFF, 0xFF, 0]);
+  test('close-pass, idle and message screens', () {
+    final alert = renderCloseAlert(distanceM: 0.84, speedKmh: 41.6);
+    final ascii = alert.toAscii();
+    expect(alert.litPixels, greaterThan(600), reason: 'large letters');
+    // Text is drawn inside the screen with a margin on both sides.
+    for (final row in ascii.split('\n')) {
+      expect(row.startsWith('#'), isFalse);
+      expect(row.endsWith('#'), isFalse);
+    }
+    // The info line (row 55-61) is only drawn when there's something to say.
+    bool infoRow(OledFrame f) => [for (var x = 0; x < 128; x++) for (var y = 55; y < 62; y++) f.pixel(x, y)].any((p) => p);
+    expect(infoRow(alert), isTrue);
+    expect(infoRow(renderCloseAlert()), isFalse);
+    expect(renderIdle().litPixels, greaterThan(100));
+    expect(renderMessage('ROUTING').litPixels, greaterThan(50));
+    expect(renderMessage('A', 'B').litPixels, greaterThan(renderMessage('A').litPixels));
   });
 
   group('flash at 5 m', () {

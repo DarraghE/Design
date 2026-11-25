@@ -167,6 +167,41 @@ OledFrame renderOled(NavState s) {
   return f;
 }
 
+/// Close-pass alert, shown when the Main Module reports a close pass and
+/// navigation is off: "CLOSE PASS" in large letters, then the passing
+/// distance and speed when known, e.g. "0.8 M  42 KM/H".
+OledFrame renderCloseAlert({double? distanceM, double? speedKmh}) {
+  final f = OledFrame();
+  f.centredText(0, 128, 2, 'CLOSE', scale: 3);
+  f.centredText(0, 128, 26, 'PASS', scale: 3);
+  final parts = <String>[
+    if (distanceM != null) '${distanceM.toStringAsFixed(1)} M',
+    if (speedKmh != null) '${speedKmh.round()} KM/H',
+  ];
+  if (parts.isNotEmpty) f.centredText(0, 128, 55, parts.join('  '));
+  return f;
+}
+
+/// Idle screen while connected, not navigating and no recent close pass.
+OledFrame renderIdle() {
+  final f = OledFrame();
+  f.centredText(0, 128, 18, 'READY', scale: 3);
+  f.centredText(0, 128, 48, 'CLOSE PASS ON');
+  return f;
+}
+
+/// One or two short lines of text, e.g. while the route is loading.
+OledFrame renderMessage(String line1, [String? line2]) {
+  final f = OledFrame();
+  if (line2 == null) {
+    f.centredText(0, 128, 25, line1, scale: 2);
+  } else {
+    f.centredText(0, 128, 14, line1, scale: 2);
+    f.centredText(0, 128, 38, line2, scale: 2);
+  }
+  return f;
+}
+
 /// Turn angle in degrees: 0 = straight ahead, negative = left.
 double? turnAngle(ManoeuvreKind k) => switch (k) {
       ManoeuvreKind.straight => 0,
@@ -371,6 +406,9 @@ void _drawDistance(OledFrame f, double metres) {
 const Map<String, List<String>> _font = {
   ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
   '-': ['.....', '.....', '.....', '#####', '.....', '.....', '.....'],
+  '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
+  ':': ['.....', '.##..', '.##..', '.....', '.##..', '.##..', '.....'],
+  '!': ['..#..', '..#..', '..#..', '..#..', '..#..', '.....', '..#..'],
   '.': ['.....', '.....', '.....', '.....', '.....', '.##..', '.##..'],
   '>': ['#....', '.#...', '..#..', '...#.', '..#..', '.#...', '#....'],
   '?': ['.###.', '#...#', '....#', '...#.', '..#..', '.....', '..#..'],

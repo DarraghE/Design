@@ -7,10 +7,10 @@ A cycling navigation and safety system for a bike in Ireland:
 
 | Folder | Runs on | Status | Code |
 |--------|---------|--------|------|
-| [Phone App](Phone%20App/SPECIFICATION.md) | Android phone | Navigation works (route, GPS, rerouting, screen preview). No Bluetooth yet | Flutter app (`app/`) + navigation package (`navigation/`) |
-| [Front Module](Front%20Module/SPECIFICATION.md) | ESP32 DevKit V1 + 128x64 OLED | Test firmware: shows a picture sent over USB. Not confirmed on hardware | `front_module.ino` |
+| [Phone App](Phone%20App/SPECIFICATION.md) | Android phone (Pixel 9a) | **App complete**: Navigation and Close Pass modes, Bluetooth link, LiDAR replay, OpenAI plate reading, website upload, demo module. 77 tests pass. Waiting for the Main and Front Module firmware to talk to real hardware. **Install: [`Phone App/release/BikeNav.apk`](Phone%20App/release/BikeNav.apk)** | Flutter app (`app/`) + navigation package (`navigation/`) |
+| [Front Module](Front%20Module/SPECIFICATION.md) | ESP32 DevKit V1 + 128x64 OLED | Test firmware: shows a picture sent over USB. Not confirmed on hardware. Showing the phone's frames: **designed, to build** (its spec, section 8) | `front_module.ino` |
 | [Camera Module](Camera%20Module/SPECIFICATION.md) | M5Stack Timer Camera X | Working photo server over ESP-NOW (uploaded 22 Nov, per the backup) | `camera_module.ino` |
-| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts (v1.13 compiles, not confirmed on hardware; LiDAR goes through a Mac for now). Phone link and forwarding images to the Front Module: planned, not built | `main_module.ino` |
+| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts (v1.13 compiles, not confirmed on hardware; LiDAR goes through a Mac for now). Phone link and forwarding images to the Front Module: **designed, to build** (see its spec, section 8) | `main_module.ino` |
 | [Tools](Tools/README.md) | A computer | Occasional helpers: flash script, LiDAR viewer, OLED image test | |
 | [Archive](Archive/ARCHIVE_NOTE.md) | n/a | Old repo contents and the original firmware backup, kept unchanged for reference | |
 
@@ -29,18 +29,21 @@ Each module folder has a `SPECIFICATION.md` saying what its code does, how to bu
 
  Mac (Tools/OLED Image Test) ──USB──▶ Front Module (shows a test picture)
 
- Phone App: navigation runs on the phone and previews the handlebar screen on the phone. Not linked to any module yet.
+ Phone App: complete. Works with its built-in demo Main Module; the real Main Module needs its Bluetooth side.
 ```
 
-**Planned:**
+**Designed (phone side built and tested; ESP32 side to build):**
 
 ```
- Phone App ──Bluetooth (planned)──▶ Main Module (back of bike: LiDAR, lights, hub) ──▶ Front Module (screen)
-                                         │
-                                         └── ESP-NOW ──▶ Camera Module
+ Phone App ──Bluetooth LE──▶ Main Module (back of bike: LiDAR, lights, hub) ──ESP-NOW──▶ Front Module (screen)
+     ▲                              │
+     └── close-pass alert,          └── ESP-NOW ──▶ Camera Module (5 photos per close pass)
+         photos, LiDAR clip
 ```
 
-The **Main Module** is the phone's main link. The phone draws each navigation screen as an image and sends it to the Main Module, which passes it straight on to the Front Module. Still to decide: the phone link details, the Main Module → Front Module link, the image format, and how the LiDAR connects without the Mac. See `Front Module/SPECIFICATION.md` section 1.2.
+- **Navigation mode:** the phone draws every handlebar screen and sends it compressed (about 200 bytes) to the Main Module, which forwards it unchanged to the Front Module. Nothing comes back.
+- **Close Pass mode (always on):** the Main Module alerts the phone, then sends the photos and a LiDAR clip. The phone shows "CLOSE PASS" on the handlebar (unless navigating), replays the pass, reads the number plate with OpenAI and uploads it to the website.
+- Exact bytes: `Phone App/SPECIFICATION.md` section 3. Work lists: section 8 (Main Module), section 9 (Front Module). Website contract: `Phone App/docs/website_upload.md`.
 
 ## Before you trust it
 

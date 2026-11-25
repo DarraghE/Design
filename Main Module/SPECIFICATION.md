@@ -133,7 +133,7 @@ A half-received frame is dropped if no byte arrives for 250 ms.
 
 ### 2.3 Phone App
 
-**Planned, not built.** The Main Module will be the phone's **main link**, most likely over Bluetooth (not decided). The phone will send it ready-drawn 128 × 64 navigation images, which it passes **immediately** to the Front Module (link still to choose; ESP-NOW fits, since this board already uses it for the camera). Detection events and photos could go back to the phone over the same link. None of this exists in the firmware or the phone app yet. See `Front Module/SPECIFICATION.md` section 1.2 for the open decisions.
+**Defined by the phone app, not yet built in this firmware.** The Phone App (built 25 Nov 2026) connects to the Main Module over **Bluetooth LE** (service `6e3b2000-8f7a-4c1e-9b52-2d1c0b7a1f10`, name "BikeNav Main"). It writes compressed handlebar screens (`0x10` packets), which this module must forward **unchanged** by ESP-NOW to the Front Module. It expects a `0xA1` alert at each close pass, then a package with ~5 photos and a ~3.5 s LiDAR clip. The exact bytes are in `Phone App/SPECIFICATION.md` section 3, and the step-by-step work list is in section 8 below.
 
 ## 3. Features
 
@@ -210,7 +210,7 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 4. **Needs a computer:** the LiDAR currently goes through a Mac. For riding, the LiDAR must be wired to the ESP32 (`LIDAR_RX_PIN`) and photos must go somewhere other than the Mac's Downloads folder.
 5. **Thresholds not validated:** test stationary and in controlled conditions first (suggested order: ports → version → lights → camera → LiDAR orientation → replay → live). Don't do unsafe road tests. **This must not be the only safety device on a bike.**
 6. **ESP-NOW is unencrypted and unauthenticated.** That's fine for a prototype, not for anything adversarial.
-7. **Phone link and image forwarding (decided, not built):** this module is the phone's main link and must pass navigation images from the phone straight on to the Front Module. Still to decide: Bluetooth details, the link to the Front Module, and the frame format (see `Front Module/SPECIFICATION.md` section 1.2). Adding Bluetooth alongside ESP-NOW and the LiDAR work also needs checking for memory and timing on this ESP32: the sketch already uses 71% of program space.
+7. **Phone link and image forwarding (designed, not built):** see section 8. The phone side is finished and tested against a simulated Main Module that speaks the same protocol (`Phone App/app/lib/link/demo_main_module.dart`).
 8. Power supply, enclosure, LED strip length and BI wiring, and the LiDAR connector pinout are all undocumented.
 
 ## 7. Notes for AI assistants
@@ -221,3 +221,16 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 - The USB protocol (section 2.1) must match `Tools/LiDAR Viewer/scan_wire.py` and `viewer.py`. The ESP-NOW packets (section 2.2) must match `Camera Module/camera_module.ino` (`Request` 8 bytes, `Reply` 236 bytes, channel 6).
 - Keep live and replay going through the same detector.
 - The sketch must stay one file. The original five-file version is in `Archive/Firmware_Backup_v2_2026-11-25/`.
+- When adding the phone link, follow `Phone App/SPECIFICATION.md` sections 3 and 8 exactly; the phone app's tests define the expected bytes.
+
+## 8. To add: the phone link (brief for whoever writes it)
+
+**Nothing in this section exists yet in `main_module.ino`.** The full plain-English work list, written to hand to another person or AI, is **`Phone App/SPECIFICATION.md` section 8**, with the exact bytes in section 3. In short:
+
+1. Bluetooth LE server (NimBLE-Arduino): service `6e3b2000-…`, write characteristic `6e3b2001-…`, notify characteristic `6e3b2002-…`, name "BikeNav Main", MTU up to 512.
+2. Forward every `0x10` write **unchanged** by ESP-NOW to the Front Module (new peer on channel 6).
+3. Answer `0x40` hello with a `0xC1` status (LiDAR, camera and Front Module OK flags).
+4. At `newClose`, notify `0xA1` straight away (event number, closest distance, approach speed).
+5. Take **5** photos instead of 10 and keep them in memory; keep ~2 s of scans before the event and record ~1.5 s after.
+6. Send the close-pass package (`CPK1` layout) as `0xB1`/`0xB2`/`0xB3` notifications with a CRC-32, and resend if the phone replies `0x30` status 1 or doesn't reply within 5 s.
+7. Pick a larger partition scheme: the sketch is at 71% of 1.3 MB before adding Bluetooth.

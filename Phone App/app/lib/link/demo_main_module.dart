@@ -64,7 +64,7 @@ class DemoMainModule implements LinkTransport {
         final frame = _assembler.add(data);
         if (frame != null) lcd.value = frame;
       case msgHello:
-        _notify(const ModuleStatus(lidarOk: true, cameraOk: true, frontOk: true, batteryPercent: 87, firmware: '1.14').encode());
+        _notify(const ModuleStatus(lidarOk: true, cameraOk: true, frontOk: true, batteryPercent: 87, firmware: '1.25').encode());
       case msgTransferAck when data.length >= 4:
         acks.add(data[3]);
         if (data[3] == ackResend && _lastPackage != null && u16(data, 1) == _lastTransferId) {

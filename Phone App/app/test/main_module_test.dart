@@ -45,7 +45,7 @@ void main() {
     expect(m.connected, isTrue);
     expect(demo.received.first, encodeHello());
     await until(() => m.status != null);
-    expect(m.status!.firmware, '1.14');
+    expect(m.status!.firmware, '1.25');
 
     final frame = renderCloseAlert(distanceM: 0.9, speedKmh: 40);
     m.sendFrame(frame, flash: true);

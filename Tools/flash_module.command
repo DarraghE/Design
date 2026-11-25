@@ -8,8 +8,9 @@
 #
 # PORT is the board's USB serial port, e.g. /dev/cu.usbserial-0001. Find it by
 # unplugging and replugging the board and running: ls /dev/cu.*
-# Main Module only: LIDAR_RX_PIN=<gpio> bash Tools/flash_module.command main PORT
-# builds the optional direct LiDAR UART input on that GPIO.
+# Main Module: main_module.ino already starts with #define LIDAR_RX_PIN 16
+# (LiDAR wired to GPIO16). LIDAR_RX_PIN=<gpio> here is only needed if you
+# remove that line and want a different pin.
 #
 # Replaces the backup's Flash_Relay.command, Flash_Camera.command and the
 # flashing part of the OLED test.sh, which pointed at the old folder names.
@@ -19,9 +20,9 @@ module=${1:-}
 port=${2:-}
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 case "$module" in
-  front)  folder="Front Module";  sketch=front_module;  libs=("Adafruit GFX Library" "Adafruit SSD1306" "Adafruit BusIO") ;;
+  front)  folder="Front Module";  sketch=front_module;  libs=("Adafruit GFX Library" "Adafruit SSD1306" "Adafruit BusIO" "TJpg_Decoder") ;;
   camera) folder="Camera Module"; sketch=camera_module; libs=() ;;
-  main)   folder="Main Module";   sketch=main_module;   libs=("Adafruit NeoPixel") ;;
+  main)   folder="Main Module";   sketch=main_module;   libs=("Adafruit NeoPixel" "NimBLE-Arduino") ;;
   *) echo "Usage: bash Tools/flash_module.command front|camera|main PORT|--compile-only"; exit 1 ;;
 esac
 [ -n "$port" ] || { echo "Give the USB port, or --compile-only."; exit 1; }
@@ -50,6 +51,8 @@ if [ "$module" = main ] && [ -n "${LIDAR_RX_PIN:-}" ]; then
 fi
 
 fqbn=esp32:esp32:esp32:UploadSpeed=115200
+# Main Module v1.26 includes Bluetooth: use the 3 MB app partition.
+if [ "$module" = main ]; then fqbn="$fqbn,PartitionScheme=huge_app"; fi
 if [ "$port" = --compile-only ]; then
   "$cli" compile ${flags[@]+"${flags[@]}"} --fqbn "$fqbn" "$build/$sketch"
   echo "Compiled $folder. Nothing was uploaded."

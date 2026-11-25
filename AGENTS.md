@@ -28,7 +28,7 @@ Camera Module/         M5Stack Timer Camera X
   SPECIFICATION.md
   camera_module.ino
 Main Module/           FireBeetle ESP32 hub at the back of the bike: LiDAR detection,
-                       LED warning, camera trigger, phone link (planned)
+                       LED warning, camera trigger, Bluetooth phone link
   SPECIFICATION.md
   main_module.ino
 Tools/                 Occasional computer-side helpers (flash script, LiDAR viewer,

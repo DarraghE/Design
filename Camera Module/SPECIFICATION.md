@@ -5,7 +5,7 @@
 | **Module** | Camera Module: photographs close passes on request |
 | **Runs on** | M5Stack Timer Camera X (ESP32 with an OV3660 camera) |
 | **Code file** | `camera_module.ino` (Arduino sketch) |
-| **Status** | **Working firmware, probably on the camera already.** The backup links this exact code to a successful upload on 22 Nov 2026, but it was never read back from the board. It compiles (ESP32 core 3.2.1). |
+| **Status** | **Installed.** The team's `BikeNav_Installed_Firmware_2026-11-25` archive confirms this exact code was uploaded on 22 Nov 2026 (100%, hash verified); no later camera upload was found. Not read back from the board. It compiles (ESP32 core 3.2.1). |
 | **Source** | `TimerCam_Camera_Only/Camera/Camera.ino` from the firmware backup of 25 Nov 2026, unchanged apart from an added header comment |
 
 ## 1. What this module does

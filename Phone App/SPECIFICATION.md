@@ -6,7 +6,7 @@
 | **Runs on** | Android phone (built and laid out for a Google Pixel 9a; needs Android 7.0 / API 24 or newer, 64-bit, with Bluetooth LE) |
 | **Language** | Dart / Flutter 3.50.1 |
 | **Install file** | [`release/BikeNav.apk`](release/BikeNav.apk), version 1.0.1, 18.9 MB, SHA-256 `c933185687cabd22272be50f7afaeb7fe372a73530194e924a5a88cbc8de3309` (see section 6) |
-| **Status** | **App complete and tested in software (81 automated tests pass).** It works end to end with the built-in demo Main Module. **Not yet tested with real hardware:** the Main Module and Front Module firmware for the Bluetooth link don't exist yet (sections 8 and 9 say exactly what to add). Plate reading needs your OpenAI key; uploading needs the website address. |
+| **Status** | **App complete and tested in software (87 automated tests pass).** It works end to end with the built-in demo Main Module. **Not yet tested with real hardware:** the Main Module's Bluetooth side is written (firmware v1.14, section 8) but not yet run on the board; the Front Module's frame display isn't built yet (section 9). Plate reading needs your OpenAI key; uploading needs the website address. |
 
 ## 1. What the app does
 
@@ -102,7 +102,7 @@ Phone App/
     │   ├── services/                        location (GPS), place_search (ORS geocoding)
     │   └── ui/                              screens, theme, demo photos, widgets (lcd_preview,
     │                                        lidar_replay, route_map)
-    ├── test/                                45 app tests (see section 7)
+    ├── test/                                51 app tests (see section 7)
     └── android/                             permissions, app id ie.tcd.design.bike_app
 ```
 
@@ -205,13 +205,13 @@ Clear messages for: no key, wrong key (401), model not available (404), out of c
 | Suite | Command | What it checks |
 |-------|---------|----------------|
 | navigation (36) | `cd "Phone App/navigation"; dart test` | Routing logic N1-N7, screens, close-pass/idle screens, row-major layout, row-XOR, PackBits (incl. the Apple TN1023 vector), packets round-trip for every screen, out-of-order chunks |
-| app (41) | `cd "Phone App/app"; flutter test` | Protocol bytes (CRC vector, alert/status encodings, transfers in any order, missing/corrupt/oversize), package and clip round-trip and damage, LiDAR demo scene and reconstruction maths, connection (hello/status, frames pixel-exact at the module, newest-frame-wins, resend after reconnect, damaged transfer re-requested, remember + auto-reconnect + stop on disconnect), display rules (idle, alert, flash timing, back to idle, keep-alive, navigation keeps the screen), a full simulated Dublin ride with every frame checked, the full close-pass pipeline (alert → incident → plate → upload, saved to disk and reloaded), unsure/no plate, no key/website then resume, errors, OpenAI request and prompt structure, parsing and every error, plate formats, multipart upload contents, and widgets at Pixel 9a size |
+| app (51) | `cd "Phone App/app"; flutter test` | Protocol bytes (CRC vector, alert/status encodings, transfers in any order, missing/corrupt/oversize), package and clip round-trip and damage, LiDAR demo scene and reconstruction maths, connection (hello/status, frames pixel-exact at the module, newest-frame-wins, resend after reconnect, damaged transfer re-requested, remember + auto-reconnect + stop on disconnect), display rules (idle, alert, flash timing, back to idle, keep-alive, navigation keeps the screen), a full simulated Dublin ride with every frame checked, the full close-pass pipeline (alert → incident → plate → upload, saved to disk and reloaded), unsure/no plate, no key/website then resume, errors, OpenAI request and prompt structure, parsing and every error, plate formats, multipart upload contents, the new routing addresses, **the Main Module firmware's own notifications** (`firmware_vectors_test.dart`: alert, status and a full close-pass package at MTU 23/185/247/517, generated from `main_module.ino` by `Tools/Phone Link Test/`), and widgets at Pixel 9a size |
 
 Not covered by tests: real Bluetooth radio behaviour, real GPS, live OpenRouteService/OpenAI/website calls (all need hardware, keys or the website), and how the app looks on the actual phone.
 
 ## 8. To add to the Main Module (plain-English brief for whoever writes it)
 
-> **Copy this section to the person or AI writing the Main Module firmware. Nothing here has been built yet.** The exact bytes are in section 3; `app/lib/link/demo_main_module.dart` is a working reference implementation of the Main Module side in Dart.
+> **Built in Main Module firmware v1.25** (on the team's reconstructed v1.21; installed on the board as v1.26) (`Main Module/main_module.ino`; how it works: `Main Module/SPECIFICATION.md` sections 1.6 and 2.3, bench test in section 8). Not yet run on hardware. Its bytes are checked against this app's decoder by `test/firmware_vectors_test.dart` (vectors from `Tools/Phone Link Test/`). The list below is the brief it was built from; `app/lib/link/demo_main_module.dart` is the same behaviour in Dart.
 
 1. **Add a Bluetooth LE server** (NimBLE-Arduino is the lightest choice on ESP32). Advertise the service UUID `6e3b2000-…` in the advertising packet and the name **"BikeNav Main"** in the scan response. Create the two characteristics from section 3.1. Accept MTU up to 512. Restart advertising when the phone disconnects. No pairing PIN is needed.
 2. **Keep ESP-NOW working alongside Bluetooth.** The camera link must keep using Wi-Fi channel 6. ESP32 can run BLE and ESP-NOW together (software coexistence), but test the photo transfer speed with BLE connected.
@@ -237,7 +237,7 @@ Not covered by tests: real Bluetooth radio behaviour, real GPS, live OpenRouteSe
 
 ## 10. Known gaps and next steps
 
-1. **No hardware link yet:** sections 8 and 9 must be built before the phone can drive the real bike. Until then, the demo module exercises the identical code path.
+1. **Hardware link not yet tried:** the Main Module side (section 8) is written and installed (firmware v1.26) but hasn't been tried with the phone yet; the Front Module side (section 9) isn't built yet. Until then, the demo module exercises the identical code path.
 2. **Screen off / app in background:** while **navigating**, GPS runs as a foreground service (a "Bike Nav is navigating" notification), so directions keep going to the handlebar with the screen off. **Close Pass mode on its own** (not navigating) only runs while the app is open or recently used. Android may pause it in the background, so for rides without navigation keep the app open, or add a foreground service for the Bluetooth link (task P6).
 3. **Live services untested from here:** real OpenRouteService routes (OpenRouteService moved to `api.heigit.org` on 24 Nov 2026; the app uses the new address, which was checked to answer, but not with a real key) (a saved Dublin route is used in tests), OpenAI plate reading on real camera photos, and the website (not built yet).
 4. **Plate reading is only as good as the photos:** QVGA (320×240) photos of a moving car are small, so the camera resolution may need raising for reliable plates. The app reports honest confidence and never auto-uploads an unsure plate.

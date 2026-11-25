@@ -235,13 +235,15 @@ class TestScreen:
                             self.log(f'ESP32 detected {int(close)} close pass(es). The relay starts a burst when idle.')
                         if approach != b'0':
                             self.log(f'ESP32 detected {int(approach)} incoming-car warning(s).')
-                    elif line.startswith(b'READY 1.13 RADIO '):
+                    elif line.startswith((b'READY 1.13 RADIO ', b'READY 1.20 RADIO ')):
+                        # 1.20: sent by v1.20, v1.21 and v1.25 (= v1.21 + phone link).
                         version_deadline = None
                         self.ready.set()
+                        firmware = line.split()[1].decode()
                         with self.lock:
-                            self.relay_status = ('Relay v1.13 · Camera radio ready'
+                            self.relay_status = (f'Main Module v{firmware} · Camera radio ready'
                                                  if line.endswith(b' OK') else
-                                                 'Relay v1.13 · Camera radio failed to start')
+                                                 f'Main Module v{firmware} · Camera radio failed to start')
                         self.log(self.relay_status)
                     elif line == b'OK LED PULSE GPIO2':
                         light_deadline = None
@@ -275,7 +277,7 @@ class TestScreen:
         if folder is None:
             self.log(f'Camera test photo received, {len(jpeg):,} bytes')
             return
-        self.log(f'Photo {shot}/10 received, {len(jpeg):,} bytes')
+        self.log(f'Photo {shot} received, {len(jpeg):,} bytes')  # bursts: 10 photos before v1.25, 5 since
         path = folder / f'photo_{shot:02d}.jpg'
         try:
             folder.mkdir(parents=True, exist_ok=True)

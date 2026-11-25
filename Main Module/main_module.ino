@@ -1,6 +1,10 @@
 // =============================================================================
-// Rear Module firmware: LiDAR close-pass / approach detector, warning lights
+// Main Module firmware: LiDAR close-pass / approach detector, warning lights
 // and camera trigger ("relay", v1.13)
+//
+// The Main Module is the hub at the back of the bike and the phone's main
+// link. The phone link and forwarding images to the Front Module are planned
+// but NOT in this firmware yet.
 // =============================================================================
 //
 // Board:      FireBeetle ESP32. In the Arduino IDE choose "ESP32 Dev Module"

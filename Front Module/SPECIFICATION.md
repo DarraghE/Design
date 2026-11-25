@@ -22,19 +22,19 @@ The picture isn't saved: after a reset the screen shows "Receiver ready" again. 
 
 ### 1.2 Planned: navigation display (team decision, 25 Nov 2026)
 
-The phone works out the turn-by-turn directions and **draws each screen as an image**. It sends the image over **Bluetooth** to a **main module**, which **immediately passes it on** to the Front Module. The Front Module just shows each image.
+The phone works out the turn-by-turn directions and **draws each screen as an image**. It sends the image to the **Main Module** (the hub at the back of the bike, and the phone's main link), which **immediately passes it on** to the Front Module. The Front Module just shows each image. It doesn't talk to the phone directly.
 
 ```
- Phone App ──Bluetooth──▶ main module ──(link to choose)──▶ Front Module (OLED)
- draws 128x64 frames        forwards frames                    shows frames
+ Phone App ──Bluetooth (planned)──▶ Main Module ──(link to choose)──▶ Front Module (OLED)
+ draws 128x64 frames                 forwards frames at once            shows frames
 ```
 
 Today's image receiver is the starting point for this: it already shows whole 128 × 64 frames. **Still to decide:**
 
 | Question | Notes |
 |----------|-------|
-| Which board is the main module? | The Rear Module's FireBeetle already runs ESP-NOW (to the camera), so it's a candidate. It could also be a separate board, or the Front Module could take Bluetooth from the phone itself |
-| Main module → Front Module link | ESP-NOW fits: a 1024-byte frame is 5 ESP-NOW packets of up to 250 bytes |
+| Phone → Main Module link | The team leans towards Bluetooth. Not built on either side |
+| Main Module → Front Module link | ESP-NOW fits: the Main Module already uses it for the camera, and a 1024-byte frame is 5 ESP-NOW packets of up to 250 bytes |
 | Bit order of the 1024 bytes | The receiver expects **row by row, leftmost pixel in the top bit** (Adafruit `drawBitmap`). The phone's `OledFrame.toSsd1306()` produces the SSD1306's **page layout** (8 rows per byte, top pixel in bit 0). Pick one format and convert on one side |
 | Compression | Raw frames are only 1024 bytes. Compression is optional |
 | Flashing at 5 m | The phone's current design flashes the screen by inverting it 4 times a second. With images, the phone can send inverted frames, or the protocol can carry a flash flag |
@@ -71,8 +71,8 @@ Total **1029 bytes**. There's no checksum.
 |---------|--------|-----------------------------|
 | Start the OLED (SSD1306, I2C 0x3C, SDA 15, SCL 22) | Written, not confirmed on hardware | `setup()` |
 | Receive and show a 128 × 64 image over USB | Written, not confirmed on hardware | `loop()` |
-| Receive images from the main module | **Not started** (planned) | — |
-| Bluetooth | **Not started** (planned: phone → main module) | — |
+| Receive images from the Main Module | **Not started** (planned) | — |
+| Link to the Main Module | **Not started** (ESP-NOW suggested) | — |
 | Brightness for daylight, battery reading | **Not started** | — |
 
 ## 4. Hardware and wiring
@@ -110,13 +110,13 @@ Total **1029 bytes**. There's no checksum.
 
 1. **Not confirmed on hardware.** This GPIO15 version was never confirmed flashed. The older GPIO21 version uploaded on 25 Nov 2026, but the screen wasn't confirmed.
 2. **Confirm the real SDA pin** (15 or 21) and update `Wire.begin` and section 4.
-3. **Build the planned navigation path** (section 1.2): choose the main module, the link, and the frame format.
+3. **Build the planned navigation path** (section 1.2): choose the Main Module → Front Module link and the frame format.
 4. Brightness/contrast for daylight, battery level and mounting aren't done.
 5. Old versions are in `Archive/Firmware_Backup_v2_2026-11-25/` (`OLED_Test_v1/` is the GPIO21 version). The Bluetooth symbol-based firmware is in `spidermannn3000/Design-group`.
 
 ## 7. Notes for AI assistants
 
 - The 1029-byte packet (section 2.1) must match `Tools/OLED Image Test/OLED_Dashboard_v2.html` and `sender.py`.
-- When building the navigation link, write the chosen frame format and link into section 2 here, into `Phone App/SPECIFICATION.md` section 5, and into the main module's spec, all in the same commit.
+- When building the navigation link, write the chosen frame format and link into section 2 here, into `Phone App/SPECIFICATION.md` section 5, and into `Main Module/SPECIFICATION.md`, all in the same commit.
 - The code body is the backup's original compact style. If you rewrite it for readability, keep the behaviour and the serial replies the same.
 - Keep the sketch as one file.

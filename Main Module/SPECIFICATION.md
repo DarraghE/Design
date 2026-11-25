@@ -1,16 +1,27 @@
-# Rear Module: Specification
+# Main Module: Specification
 
 | | |
 |---|---|
-| **Module** | Rear Module: LiDAR detection, warning lights and camera trigger (called the "relay" in the backup) |
-| **Runs on** | FireBeetle ESP32 |
-| **Code file** | `rear_module.ino` (Arduino sketch, firmware version **1.13**) |
+| **Module** | Main Module: the hub at the back of the bike. It handles LiDAR detection, the warning lights and the camera trigger, and is the phone's main link (called the "relay" in the backup) |
+| **Runs on** | FireBeetle ESP32, mounted at the back of the bike |
+| **Code file** | `main_module.ino` (Arduino sketch, firmware version **1.13**) |
 | **Status** | **Firmware written; compiles (ESP32 core 3.2.1); not confirmed working on hardware.** v1.13 has never been confirmed flashed: the last recorded build (22 Nov 2026) failed on the Mac before upload. The LiDAR currently has to go through a computer (see section 4.3). |
 | **Source** | v1.13 relay from the firmware backup of 25 Nov 2026: `Archive/Firmware_Backup_v2_2026-11-25/LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/`. Its five files were merged into one, with no logic changes. |
 
 ## 1. What this module does
 
-The Rear Module watches the road **behind and to the right** of the bike with a 2D LiDAR (STL-19P). On every full scan it runs two detectors:
+The Main Module is the centre of the bike system. It sits at the back of the bike with the LiDAR and the warning lights. It is also the module the **phone talks to**:
+
+| Role | Status |
+|------|--------|
+| LiDAR detection, warning lights, close-pass photos (below) | Firmware written (v1.13) |
+| Commands the Camera Module over ESP-NOW | Firmware written |
+| **Main link to the Phone App** (planned: Bluetooth) | **Not started** |
+| **Forwards navigation images from the phone straight to the Front Module** | **Not started** |
+
+### What the current firmware does
+
+The Main Module watches the road **behind and to the right** of the bike with a 2D LiDAR (STL-19P). On every full scan it runs two detectors:
 
 | Detector | Looks for | Result |
 |----------|-----------|--------|
@@ -20,7 +31,7 @@ The Rear Module watches the road **behind and to the right** of the bike with a 
 It also answers test commands from a computer: test the lights, take one photo, report the version, reset the detectors.
 
 ```
- STL-19P LiDAR ──USB 230400──▶ Mac (Tools/LiDAR Viewer) ──USB 460800──▶ Rear Module (FireBeetle ESP32)
+ STL-19P LiDAR ──USB 230400──▶ Mac (Tools/LiDAR Viewer) ──USB 460800──▶ Main Module (FireBeetle ESP32)
                                      ▲                                      │  │
                                      └──── scans, detections, JPEGs ────────┘  ├─ GPIO2 ──▶ WS2813 LED strip (30 LEDs)
                                                                                └─ ESP-NOW ch 6 ◀──▶ Camera Module
@@ -122,11 +133,11 @@ A half-received frame is dropped if no byte arrives for 250 ms.
 
 ### 2.3 Phone App
 
-**None yet.** The Rear Module has no Bluetooth link to the phone. See section 6 for the planned "main module" role.
+**Planned, not built.** The Main Module will be the phone's **main link**, most likely over Bluetooth (not decided). The phone will send it ready-drawn 128 × 64 navigation images, which it passes **immediately** to the Front Module (link still to choose; ESP-NOW fits, since this board already uses it for the camera). Detection events and photos could go back to the phone over the same link. None of this exists in the firmware or the phone app yet. See `Front Module/SPECIFICATION.md` section 1.2 for the open decisions.
 
 ## 3. Features
 
-| Feature | Status | Where in `rear_module.ino` |
+| Feature | Status | Where in `main_module.ino` |
 |---------|--------|----------------------------|
 | STL-19P decoding (CRC check, sweep assembly, 55–215° and 30–12000 mm crop) | Written, not hardware-tested in this form | `class Stl19p` |
 | Replay of recorded scans from the computer | Written | `class ScanInput`, `receiveInput` |
@@ -137,7 +148,8 @@ A half-received frame is dropped if no byte arrives for 250 ms.
 | 10-photo burst on close pass via the Camera Module | Written | `requestPhotoBurst`, `captureBurst`, `capture` |
 | Test commands V / C / P / R | Written | `receiveInput` |
 | Direct LiDAR wiring to the ESP32 (UART2) | Written, **off by default**, no pin chosen | `#ifdef LIDAR_RX_PIN` |
-| Link to the Phone App | Not started | — |
+| Main link to the Phone App (Bluetooth planned) | **Not started** | — |
+| Forward navigation images to the Front Module | **Not started** | — |
 
 ## 4. Hardware and wiring
 
@@ -169,7 +181,7 @@ Strip: WS2813 (as reported by the team), **30 LEDs**, GRB, 800 kHz. The strip's 
 |---|---|
 | Sensor | STL-19P (D500-compatible protocol), 2D, **230400 baud, 8N1** |
 | Packets | 47 bytes: header `0x54 0x2C`, speed, start angle, 12 × (distance mm, intensity), end angle, timestamp, CRC8 (polynomial `0x4D`) |
-| **Current connection** | **Plugged into the Mac by USB**. The Mac forwards the raw bytes to the Rear Module (`Tools/LiDAR Viewer/viewer.py --lidar`) |
+| **Current connection** | **Plugged into the Mac by USB**. The Mac forwards the raw bytes to the Main Module (`Tools/LiDAR Viewer/viewer.py --lidar`) |
 | Optional direct connection | Build with `LIDAR_RX_PIN=<gpio>`. Sensor TX → that GPIO (UART2 RX), common ground, matching voltage levels. ESP32 TX is not used. **No pin has been chosen or tested.** Use only one LiDAR input at a time |
 | Sensor power and connector pinout | Not documented |
 
@@ -185,8 +197,8 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 | ESP32 core | **3.x** (compile-checked with **3.2.1**; earlier builds used 3.2.0/3.2.1). 2.x won't work (ESP-NOW callback API) |
 | Libraries | **Adafruit NeoPixel** (1.15.5) |
 
-- **Arduino IDE:** open `rear_module.ino` (click OK when it offers to make a `rear_module` folder), set the board and port, then Upload.
-- **Mac script:** `bash Tools/flash_module.command rear PORT`. For direct LiDAR wiring: `LIDAR_RX_PIN=16 bash Tools/flash_module.command rear PORT` (16 is only an example).
+- **Arduino IDE:** open `main_module.ino` (click OK when it offers to make a `main_module` folder), set the board and port, then Upload.
+- **Mac script:** `bash Tools/flash_module.command main PORT`. For direct LiDAR wiring: `LIDAR_RX_PIN=16 bash Tools/flash_module.command main PORT` (16 is only an example).
 - **Check it works:** open the LiDAR Viewer (or a serial monitor at 460800) and send `V`. You should see `READY 1.13 RADIO OK`. Then `C` → the strip pulses red and the module reports `OK LED PULSE GPIO2`. Then `P` → a photo arrives (needs the Camera Module powered).
 - If a Mac build fails with `Failed to extract libcrypto.1.1.dylib`, nothing was uploaded. Check free disk space with `df -h "$HOME" "${TMPDIR:-/tmp}"`.
 
@@ -198,7 +210,7 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 4. **Needs a computer:** the LiDAR currently goes through a Mac. For riding, the LiDAR must be wired to the ESP32 (`LIDAR_RX_PIN`) and photos must go somewhere other than the Mac's Downloads folder.
 5. **Thresholds not validated:** test stationary and in controlled conditions first (suggested order: ports → version → lights → camera → LiDAR orientation → replay → live). Don't do unsafe road tests. **This must not be the only safety device on a bike.**
 6. **ESP-NOW is unencrypted and unauthenticated.** That's fine for a prototype, not for anything adversarial.
-7. **Planned role as the "main module" (not decided):** the team's plan is for the phone to send ready-drawn navigation images over Bluetooth to a main module, which passes them straight on to the Front Module. This board already runs ESP-NOW, so it's a candidate, but which board is the main module hasn't been decided.
+7. **Phone link and image forwarding (decided, not built):** this module is the phone's main link and must pass navigation images from the phone straight on to the Front Module. Still to decide: Bluetooth details, the link to the Front Module, and the frame format (see `Front Module/SPECIFICATION.md` section 1.2). Adding Bluetooth alongside ESP-NOW and the LiDAR work also needs checking for memory and timing on this ESP32: the sketch already uses 71% of program space.
 8. Power supply, enclosure, LED strip length and BI wiring, and the LiDAR connector pinout are all undocumented.
 
 ## 7. Notes for AI assistants

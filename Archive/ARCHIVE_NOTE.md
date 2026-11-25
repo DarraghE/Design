@@ -18,7 +18,7 @@ The current copies live in the module folders and `Tools/`. The backup keeps the
 | `OLED_GPIO15_22/test.sh` | (not copied) | Replaced by `Tools/flash_module.command front`; the image-sending step is in `Tools/README.md` |
 | `OLED_Test_v1/` | Archive only | Older OLED version with SDA on GPIO21 |
 | `TimerCam_Camera_Only/Camera/Camera.ino` | `Camera Module/camera_module.ino` | Same code, header comment added |
-| `LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/` (5 files) | `Rear Module/rear_module.ino` | Merged into one file, no logic changes (same compiled size) |
+| `LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/` (5 files) | `Main Module/main_module.ino` | Merged into one file, no logic changes (same compiled size) |
 | `LiDAR_v1.13_Complete_Setup/Mac_Viewer/` | `Tools/LiDAR Viewer/` | Unchanged |
 | `…/ESP32_Relay/Flash_Relay.command`, `…/TimerCam/Flash_Camera.command` | (not copied) | Replaced by `Tools/flash_module.command` |
 | `LiDAR_v1.13_Complete_Setup/TimerCam/Camera/`, `…/TimerCam/Recovery/` | Archive only | Older camera versions. **Don't flash the Recovery one by mistake** |

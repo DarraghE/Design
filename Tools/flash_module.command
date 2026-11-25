@@ -3,12 +3,12 @@
 #
 #   bash Tools/flash_module.command front  PORT
 #   bash Tools/flash_module.command camera PORT
-#   bash Tools/flash_module.command rear   PORT
-#   bash Tools/flash_module.command rear   --compile-only     (build, no upload)
+#   bash Tools/flash_module.command main   PORT
+#   bash Tools/flash_module.command main   --compile-only     (build, no upload)
 #
 # PORT is the board's USB serial port, e.g. /dev/cu.usbserial-0001. Find it by
 # unplugging and replugging the board and running: ls /dev/cu.*
-# Rear Module only: LIDAR_RX_PIN=<gpio> bash Tools/flash_module.command rear PORT
+# Main Module only: LIDAR_RX_PIN=<gpio> bash Tools/flash_module.command main PORT
 # builds the optional direct LiDAR UART input on that GPIO.
 #
 # Replaces the backup's Flash_Relay.command, Flash_Camera.command and the
@@ -21,8 +21,8 @@ repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
 case "$module" in
   front)  folder="Front Module";  sketch=front_module;  libs=("Adafruit GFX Library" "Adafruit SSD1306" "Adafruit BusIO") ;;
   camera) folder="Camera Module"; sketch=camera_module; libs=() ;;
-  rear)   folder="Rear Module";   sketch=rear_module;   libs=("Adafruit NeoPixel") ;;
-  *) echo "Usage: bash Tools/flash_module.command front|camera|rear PORT|--compile-only"; exit 1 ;;
+  main)   folder="Main Module";   sketch=main_module;   libs=("Adafruit NeoPixel") ;;
+  *) echo "Usage: bash Tools/flash_module.command front|camera|main PORT|--compile-only"; exit 1 ;;
 esac
 [ -n "$port" ] || { echo "Give the USB port, or --compile-only."; exit 1; }
 
@@ -44,7 +44,7 @@ mkdir "$build/$sketch"
 cp "$repo/$folder/$sketch.ino" "$build/$sketch/"
 
 flags=()
-if [ "$module" = rear ] && [ -n "${LIDAR_RX_PIN:-}" ]; then
+if [ "$module" = main ] && [ -n "${LIDAR_RX_PIN:-}" ]; then
   [[ "$LIDAR_RX_PIN" =~ ^[0-9]+$ ]] || { echo "LIDAR_RX_PIN must be a GPIO number."; exit 1; }
   flags=(--build-property "compiler.cpp.extra_flags=-DLIDAR_RX_PIN=$LIDAR_RX_PIN")
 fi

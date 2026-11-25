@@ -5,7 +5,7 @@ Occasional-use helpers that run **on a computer**, not on the bike. You don't ne
 | Tool | For | Runs on | What it does |
 |------|-----|---------|--------------|
 | [`flash_module.command`](flash_module.command) | All ESP32 modules | macOS / Linux (bash) | Builds one module's `.ino` with arduino-cli and uploads it, or just compiles it with `--compile-only` |
-| [`LiDAR Viewer/`](LiDAR%20Viewer/) | Rear Module + Camera Module | Mac (Python 3) | Forwards live LiDAR data to the Rear Module, or replays a `.lidar` recording. Shows the point cloud and detections in a browser, saves close-pass photo bursts, and has Test Camera / Test Lights buttons |
+| [`LiDAR Viewer/`](LiDAR%20Viewer/) | Main Module + Camera Module | Mac (Python 3) | Forwards live LiDAR data to the Main Module, or replays a `.lidar` recording. Shows the point cloud and detections in a browser, saves close-pass photo bursts, and has Test Camera / Test Lights buttons |
 | [`OLED Image Test/`](OLED%20Image%20Test/) | Front Module | Chrome/Edge or Python 3 | Converts any picture to 128x64 black and white and sends it to the Front Module's image receiver |
 
 These came from the firmware backup of 25 Nov 2026 (`Archive/Firmware_Backup_v2_2026-11-25/`). The viewer and OLED files are unchanged copies. `flash_module.command` is new: it replaces the backup's three flashing scripts, which pointed at old folder names. **It has been compile-tested only, never used to upload to a board.**
@@ -21,8 +21,8 @@ These came from the firmware backup of 25 Nov 2026 (`Archive/Firmware_Backup_v2_
 ```bash
 bash Tools/flash_module.command front  /dev/cu.usbserial-XXXX
 bash Tools/flash_module.command camera /dev/cu.usbserial-XXXX
-bash Tools/flash_module.command rear   /dev/cu.wchusbserialXXXX
-bash Tools/flash_module.command rear   --compile-only      # check it builds, upload nothing
+bash Tools/flash_module.command main   /dev/cu.wchusbserialXXXX
+bash Tools/flash_module.command main   --compile-only      # check it builds, upload nothing
 ```
 
 - Find the port by unplugging and replugging the board, then running `ls /dev/cu.*`. Don't trust old port names. The OLED board and the LiDAR have both appeared as `/dev/cu.usbserial-0001` at different times.
@@ -30,15 +30,15 @@ bash Tools/flash_module.command rear   --compile-only      # check it builds, up
 - **Flashing replaces whatever is on the board.** Don't flash just to look at a board.
 - If the build fails with `Failed to extract libcrypto.1.1.dylib`, nothing was uploaded. Check free disk space with `df -h "$HOME" "${TMPDIR:-/tmp}"`.
 
-## LiDAR Viewer (Rear Module)
+## LiDAR Viewer (Main Module)
 
 Needs Python 3 with `pyserial` (`pip install pyserial`). Run from the top folder of the repo:
 
 ```bash
-# Live: STL-19P LiDAR plugged into the Mac, Rear Module on another USB port
-python3 "Tools/LiDAR Viewer/viewer.py" REAR_PORT --lidar LIDAR_PORT
+# Live: STL-19P LiDAR plugged into the Mac, Main Module on another USB port
+python3 "Tools/LiDAR Viewer/viewer.py" MAIN_PORT --lidar LIDAR_PORT
 # Replay: no LiDAR needed, pick a .lidar recording in the web page
-python3 "Tools/LiDAR Viewer/viewer.py" REAR_PORT
+python3 "Tools/LiDAR Viewer/viewer.py" MAIN_PORT
 ```
 
 It opens a local web page (127.0.0.1, random port) with:
@@ -52,12 +52,12 @@ Close-pass bursts are saved as `~/Downloads/LiDAR_<time>_Burst_<n>/photo_01.jpg`
 
 | File | Role |
 |------|------|
-| `viewer.py` | Serial link to the Rear Module (460800 baud) and the LiDAR (230400), replay, photo saving, local web server |
-| `scan_wire.py` | Packs scans and raw LiDAR bytes into the Rear Module's USB frame format, and decodes its replies |
+| `viewer.py` | Serial link to the Main Module (460800 baud) and the LiDAR (230400), replay, photo saving, local web server |
+| `scan_wire.py` | Packs scans and raw LiDAR bytes into the Main Module's USB frame format, and decodes its replies |
 | `lidar_core.py` | STL-19P decoder and `.lidar` recording loader/saver (a `.lidar` file is a ZIP with `recording.json`, `scans.jsonl`, optional `serial.bin`) |
 | `index.html` | The web page |
 
-No recordings are included. The USB protocol is in `Rear Module/SPECIFICATION.md`, section 2.
+No recordings are included. The USB protocol is in `Main Module/SPECIFICATION.md`, section 2.
 
 ## OLED Image Test (Front Module)
 

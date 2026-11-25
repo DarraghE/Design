@@ -12,7 +12,7 @@
 // What it does (details in SPECIFICATION.md in this folder):
 //   - Starts the camera: JPEG, 320x240 (QVGA), quality 12, one frame buffer.
 //   - Listens on ESP-NOW channel 6 for photo requests from any ESP32 (the
-//     Rear Module asks for photos after a close pass).
+//     Main Module asks for photos after a close pass).
 //   - Takes a fresh photo when a request for offset 0 arrives, then sends it
 //     back in 224-byte chunks.
 //   - USB serial (115200) only prints start-up messages; no photos over USB.

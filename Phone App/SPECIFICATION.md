@@ -127,7 +127,7 @@ class NavState {            // returned after every GPS fix
 
 ## 5. Interface to the Front Module (draft, being replaced)
 
-> **Planned change (team decision, 25 Nov 2026):** the phone will draw each navigation screen as an image and send it over Bluetooth to a "main module", which passes it straight on to the Front Module. The Front Module then just shows images. This replaces the symbol-ID design below. **The phone code still implements the design below**, and no Bluetooth code exists yet. The open questions (which board is the main module, the link, the frame bit order) are listed in `Front Module/SPECIFICATION.md` section 1.2. `renderOled` already draws every screen as a 128 × 64 frame, and `OledFrame.toSsd1306()` gives the 1024 bytes in the SSD1306's page layout. The Front Module's current image receiver expects row-by-row bytes instead, so one side will need converting.
+> **Planned change (team decision, 25 Nov 2026):** the phone will draw each navigation screen as an image and send it (Bluetooth planned) to the **Main Module**, the hub at the back of the bike and the phone's main link. The Main Module passes each image straight on to the Front Module, which just shows it. The phone doesn't talk to the Front Module directly. This replaces the symbol-ID design below. **The phone code still implements the design below**, and no Bluetooth code exists yet. The open questions (the phone link, the Main Module → Front Module link, the frame bit order) are listed in `Front Module/SPECIFICATION.md` section 1.2. `renderOled` already draws every screen as a 128 × 64 frame, and `OledFrame.toSsd1306()` gives the 1024 bytes in the SSD1306's page layout. The Front Module's current image receiver expects row-by-row bytes instead, so one side will need converting.
 
 The rest of this section is the earlier draft, kept because it is what `symbols.dart`, `protocol.dart` and `oled.dart` implement today.
 
@@ -207,7 +207,7 @@ Android permissions: `INTERNET`, `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION
 4. **Trigger level:** the app uses Level 1. To use Level 2 or 3, change `NavConfig(mode: ...)` in `destination_screen.dart`. Level 3 also needs `prepareRoute: (r) => addJunctions(r)`.
 5. **Untested against live services:** a route with a roundabout (to check `exit_number`), and the live Overpass junction query.
 6. **Tuning:** record a real ride as GPX and replay it at all three levels to tune the 100 m, 10 m and 30 m values.
-7. **Rear and Camera Modules:** both now have firmware (LiDAR detection, warning lights, close-pass photos), but they talk to a Mac over USB, not to the phone. There's no phone-side code or protocol for them yet. If the Rear Module becomes the "main module", the phone link would also carry the navigation images.
+7. **Main Module link (planned):** the Main Module is the phone's main link. It will carry the navigation images for the Front Module, and could also bring LiDAR warnings and close-pass photos back to the phone. Today the Main and Camera Modules have firmware (LiDAR detection, warning lights, close-pass photos) but talk only to a Mac over USB. There's no phone-side code or protocol for them yet.
 8. **Image-based navigation (planned):** see the note at the top of section 5.
 
 ## 8. Notes for AI assistants

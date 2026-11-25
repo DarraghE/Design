@@ -10,7 +10,7 @@
 
 ## 1. What this module does
 
-The camera is a wireless photo server. It does nothing until another ESP32 asks it for a photo over **ESP-NOW**. Right now that's the Rear Module, which asks for a burst of 10 photos after each close pass. The camera then:
+The camera is a wireless photo server. It does nothing until another ESP32 asks it for a photo over **ESP-NOW**. Right now that's the Main Module, which asks for a burst of 10 photos after each close pass. The camera then:
 
 1. throws away the old buffered frame and takes a **fresh** photo: JPEG, **320 × 240**, quality 12;
 2. sends it back in **224-byte chunks**, one chunk per request;
@@ -23,7 +23,7 @@ USB is only for power, uploading and start-up messages. **Photos are never sent 
 
 ## 2. Interfaces
 
-### 2.1 ESP-NOW photo protocol. Contract with `Rear Module/rear_module.ino`
+### 2.1 ESP-NOW photo protocol. Contract with `Main Module/main_module.ino`
 
 | | |
 |---|---|
@@ -36,7 +36,7 @@ USB is only for power, uploading and start-up messages. **Photos are never sent 
 
 Requests with token 0, an offset that isn't a multiple of 224, or an offset of 128 KB or more are ignored.
 
-The Rear Module only accepts replies from this camera's address, `3C:8A:1F:D7:B1:24` (`cameraMac` in `rear_module.ino`). **If this camera board is replaced, update that address.**
+The Main Module only accepts replies from this camera's address, `3C:8A:1F:D7:B1:24` (`cameraMac` in `main_module.ino`). **If this camera board is replaced, update that address.**
 
 ### 2.2 USB serial (115200 baud), messages only
 
@@ -93,21 +93,21 @@ There's no external wiring: the camera is built into the M5Stack board. The pin 
 
 - **Arduino IDE:** open `camera_module.ino` (click OK when it offers to make a `camera_module` folder), set the board and port, then Upload. This replaces M5Stack's own camera firmware.
 - **Mac script:** `bash Tools/flash_module.command camera PORT`
-- **Check it works:** open a serial monitor at 115200 and reset the board. You should see `ESP-NOW camera ready on channel 6`. Then, with the Rear Module running, click **Test Camera** in `Tools/LiDAR Viewer`: a 320 × 240 photo should appear.
+- **Check it works:** open a serial monitor at 115200 and reset the board. You should see `ESP-NOW camera ready on channel 6`. Then, with the Main Module running, click **Test Camera** in `Tools/LiDAR Viewer`: a 320 × 240 photo should appear.
 
 ## 6. Known gaps and next steps
 
 1. **Not read back from the board:** the backup says this code was uploaded on 22 Nov 2026, but nobody has confirmed the camera is running it.
 2. **Anyone nearby can request photos.** ESP-NOW is unencrypted and the camera answers any sender. That's fine for a prototype, not for real use.
-3. **Number-plate recognition** (planned via a cloud service) isn't started. Photos currently end up on the Mac (`~/Downloads/LiDAR_<time>_Burst_<n>/`), through the Rear Module and the LiDAR Viewer.
-4. **No phone link.** If photos should reach the phone, the route (Rear Module → phone, or camera → phone) needs designing.
+3. **Number-plate recognition** (planned via a cloud service) isn't started. Photos currently end up on the Mac (`~/Downloads/LiDAR_<time>_Burst_<n>/`), through the Main Module and the LiDAR Viewer.
+4. **No phone link.** The Main Module will be the phone's main link, so photos would most naturally reach the phone through it. That isn't designed yet.
 5. Mounting position and direction aren't documented.
 6. Older camera firmware is kept in `Archive/Firmware_Backup_v2_2026-11-25/LiDAR_v1.13_Complete_Setup/TimerCam/`. **Don't flash it by mistake:**
    - `Camera/Camera.ino` behaves the same as this sketch; only one line is written differently.
-   - `Recovery/Camera/Camera.ino` is an older design. It only answers the Rear Module's old address (`D4:8C:49:FA:75:48`), has a USB `P` photo command, and frees photos after 8 s.
+   - `Recovery/Camera/Camera.ino` is an older design. It only answers the Main Module's old address (`D4:8C:49:FA:75:48`), has a USB `P` photo command, and frees photos after 8 s.
 
 ## 7. Notes for AI assistants
 
-- The `Request`/`Reply` structs (8 and 236 bytes), channel 6 and the 224-byte chunk size are a **contract with the Rear Module**. The sketch enforces the sizes with a `static_assert`. Change both sketches and both specs together.
+- The `Request`/`Reply` structs (8 and 236 bytes), channel 6 and the 224-byte chunk size are a **contract with the Main Module**. The sketch enforces the sizes with a `static_assert`. Change both sketches and both specs together.
 - The camera pin map is for the Timer Camera X with the OV3660 only. A different camera board needs a different map.
 - Keep this sketch as one file.

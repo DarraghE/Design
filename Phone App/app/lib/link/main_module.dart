@@ -38,6 +38,12 @@ class MainModule extends ChangeNotifier {
   String? _error;
   String? get error => _error;
 
+  /// How often the link has dropped since the app started, and why it last
+  /// did, to diagnose an unreliable connection.
+  int drops = 0;
+  String? lastDrop;
+  DateTime? lastDropAt;
+
   /// 0-1 while a close-pass package is arriving.
   double? _progress;
   double? get transferProgress => _progress;
@@ -105,6 +111,12 @@ class MainModule extends ChangeNotifier {
 
   void _onDropped(LinkTransport t) {
     if (_transport != t) return;
+    if (_wantedId != null && !_disposed) {
+      drops++;
+      lastDrop = t.dropReason ?? 'unknown reason';
+      lastDropAt = DateTime.now();
+      _error = 'Connection lost: $lastDrop. Reconnecting…';
+    }
     _transport = null;
     _sub?.cancel();
     _sub = null;

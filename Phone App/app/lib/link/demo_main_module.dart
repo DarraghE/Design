@@ -46,6 +46,9 @@ class DemoMainModule implements LinkTransport {
   bool get isDemo => true;
 
   @override
+  String? get dropReason => null;
+
+  @override
   Stream<List<int>> get notifications => _notifications.stream;
 
   @override

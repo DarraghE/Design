@@ -10,7 +10,7 @@ A cycling navigation and safety system for a bike in Ireland:
 | [Phone App](Phone%20App/SPECIFICATION.md) | Android phone (Pixel 9a) | **App complete**: Navigation and Close Pass modes, Bluetooth link, LiDAR replay, OpenAI plate reading, website upload, demo module. 87 tests pass, including the Main Module firmware's Bluetooth bytes. Not yet tried with the real modules. **Install: [`Phone App/release/BikeNav.apk`](Phone%20App/release/BikeNav.apk)** | Flutter app (`app/`) + navigation package (`navigation/`) |
 | [Front Module](Front%20Module/SPECIFICATION.md) | ESP32 DevKit V1 + 128x64 OLED | **v1.22 installed:** shows the phone's navigation screens (decoder checked on all 415 app screens), rotated 180° for the mounting, and camera photos when no phone is connected. Not yet seen working end to end with the phone | `front_module.ino` |
 | [Camera Module](Camera%20Module/SPECIFICATION.md) | M5Stack Timer Camera X | Working photo server over ESP-NOW (uploaded 22 Nov, per the backup) | `camera_module.ino` |
-| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts, photos to the Front Module. **v1.26 is installed on the board** (= reconstructed v1.21 + the Bluetooth phone link + a USB image debugger); v1.28 adds error replies to the USB image debugger. The phone link compiles and its bytes match the app, but **hasn't been tried with the phone yet** (see its spec, section 6) | `main_module.ino` |
+| [Main Module](Main%20Module/SPECIFICATION.md) | FireBeetle ESP32 at the back of the bike | The hub: LiDAR approach + close-pass detection, LED warning, photo bursts, photos to the Front Module. **v2.2 is installed** (26 Nov 2026): a reliability rewrite of the v1.26 code. v1.26 ran out of memory at start-up, so Bluetooth failed and the module crashed and restarted over and over: that was the dropping phone link. v2.2 fits in memory (radios first, then the LiDAR clip, then photos), never stalls on USB, restarts itself if it hangs, and logs disconnect/restart reasons. To upload, jumper pin 0 to GND (the board has no BOOT button). Not yet tried with the phone on the bike (see its spec, sections 1.7 and 6) | `main_module.ino` |
 | [Tools](Tools/README.md) | A computer | Occasional helpers: flash script, LiDAR viewer, OLED image test | |
 | [Archive](Archive/ARCHIVE_NOTE.md) | n/a | Old repo contents and the original firmware backup, kept unchanged for reference | |
 
@@ -29,7 +29,7 @@ Each module folder has a `SPECIFICATION.md` saying what its code does, how to bu
 
  Main Module ──ESP-NOW (photos as JPEG)──▶ Front Module (OLED, 80x60 picture)
 
- Phone App: complete. Works with its built-in demo Main Module. Main Module v1.26 (installed)
+ Phone App: complete. Works with its built-in demo Main Module. Main Module v2.2 (installed)
  has the Bluetooth side, not yet tried with the phone. Front v1.22 (installed) draws the phone's screens.
 ```
 
@@ -44,7 +44,7 @@ Each module folder has a `SPECIFICATION.md` saying what its code does, how to bu
 
 - **Navigation mode:** the phone draws every handlebar screen and sends it compressed (about 200 bytes) to the Main Module, which forwards it unchanged to the Front Module. Nothing comes back.
 - **Close Pass mode (always on):** the Main Module alerts the phone, then sends the photos and a LiDAR clip. The phone shows "CLOSE PASS" on the handlebar (unless navigating), replays the pass, reads the number plate with OpenAI and uploads it to the website.
-- Exact bytes: `Phone App/SPECIFICATION.md` section 3. Main Module side: built in v1.25, installed as v1.26 (`Main Module/SPECIFICATION.md` sections 1.6, 2.3, 8). Front Module work list: section 9. Website contract: `Phone App/docs/website_upload.md`.
+- Exact bytes: `Phone App/SPECIFICATION.md` section 3. Main Module side: built in v1.25, installed as v2.2 (`Main Module/SPECIFICATION.md` sections 1.6, 2.3, 8). Front Module work list: section 9. Website contract: `Phone App/docs/website_upload.md`.
 
 ## Before you trust it
 

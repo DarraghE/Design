@@ -3,66 +3,69 @@
 #define LIDAR_RX_PIN 16
 
 // =============================================================================
-// Main Module firmware v1.28: LiDAR close-pass / approach detector, warning
-// lights, camera trigger, and the Bluetooth link to the phone
-//
-// v1.28 = the installed v1.26 + one fix, marked "v1.28:": the USB image
-// debugger ('@' lines) ignores '\r' (Windows/CRLF line endings) and reports
-// every rejected line as "ERR USB IMAGE ...", instead of dropping it silently
-// (which looked like a timeout to the sender).
-// (v1.27 is the number of Oscar's Chrome page on the Mac, so it is skipped.)
-//
-// v1.25 = the reconstructed v1.21 relay + the phone link (Bluetooth LE) +
-// forwarding the phone's handlebar screens to the Front Module. Not related
-// to the v1.22-1.24 phone experiments on Oscar's Mac (not in this repo).
+// Main Module firmware v2.2: LiDAR close-pass / approach detector, warning
+// lights, camera trigger, and the Bluetooth link to the phone.
+// v2.0 is a rewrite of v1.29 for RELIABILITY. Same behaviour and protocols.
+// v2.1: v2.0 ran out of memory on the board (Bluetooth failed to start, then
+// the LiDAR decoder crashed; v1.26 crashed the same way). v2.1 uses about
+// 47 KB less RAM and prints the free memory at each start-up step.
+// v2.2: v2.1 runs (checked on the board), but with Wi-Fi and Bluetooth on only
+// ~37 KB of memory is left, so v2.1's 40 KB photo rule kept every photo out.
+// Memory now goes radios first, then the LiDAR clip, then photos (rule 3).
 // =============================================================================
 //
 // Board:      FireBeetle ESP32. In the Arduino IDE choose "ESP32 Dev Module"
 //             (FQBN esp32:esp32:esp32), upload speed 115200.
 //             Tools -> Partition Scheme: "Huge APP (3MB No OTA/1MB SPIFFS)"
-//             (FQBN esp32:esp32:esp32:PartitionScheme=huge_app). With
-//             Bluetooth the sketch fills 92% of the default 1.3 MB.
-// Core:       esp32 by Espressif, 3.x (compile-checked with 3.3.8; Oscar's
-//             Mac had 3.2.0). Needs the 3.x ESP-NOW callback API.
+//             (FQBN esp32:esp32:esp32:PartitionScheme=huge_app).
+// Core:       esp32 by Espressif, 3.x (compile-checked with 3.3.8).
 // Libraries:  Adafruit NeoPixel (1.15.5) and NimBLE-Arduino (2.5.2), both in
-//             the Arduino Library Manager. WiFi, ESP-NOW and FreeRTOS come
-//             with the ESP32 core.
-// LiDAR:      wired to GPIO16 on the bike: build with -DLIDAR_RX_PIN=16
-//             (Tools/flash_module.command: LIDAR_RX_PIN=16 ...). Without it,
-//             scans come from a computer over USB.
+//             the Arduino Library Manager.
+// LiDAR:      wired to GPIO16 (LIDAR_RX_PIN above). Without it, scans come
+//             from a computer over USB (Tools/LiDAR Viewer).
 //
 // What it does (details in SPECIFICATION.md in this folder):
-//   - Reads STL-19P LiDAR data (UART2 on LIDAR_RX_PIN, or forwarded by a
-//     computer over USB at 460800 baud) and runs two detectors on every scan:
-//     close pass (within 1.5 m on the right) and approaching vehicle.
-//   - Automatic actions (on from power-up since v1.25; 'A' on / 'M' off):
-//     approach or close pass -> 30-LED WS2813 strip flashes red on GPIO2;
-//     new close pass -> 5 photos from the Camera Module over ESP-NOW.
-//   - Every photo goes to the computer (USB) and, as before, is broadcast
-//     as JPEG packets to the Front Module (forwardDisplay).
+//   - Reads the STL-19P LiDAR and runs two detectors on every scan: close pass
+//     (within 1.5 m on the right) and approaching vehicle (behind, 1.5-12 m).
+//   - Automatic actions (on at power-up; 'A' on / 'M' off): approach or close
+//     pass -> 30-LED WS2813 strip flashes red on GPIO2; new close pass -> 5
+//     photos from the Camera Module over ESP-NOW.
 //   - Phone link (Bluetooth LE, "BikeNav Main"): forwards the phone's
-//     handlebar screens unchanged to the Front Module over ESP-NOW; on a close
-//     pass sends the phone an alert at once, then a package with the photos
-//     and a LiDAR clip (2 s before to 1.5 s after). Protocol: Phone App/
-//     SPECIFICATION.md section 3. Code: the last two sections of this file.
+//     handlebar screens to the Front Module over ESP-NOW; on a close pass
+//     alerts the phone at once, then sends the photos and a LiDAR clip.
+//   - USB (460800 baud): diagnostics and the LiDAR viewer protocol.
 //
-// Settings at a glance (search for the name to change them):
-//   ledDataPin = 2 (FireBeetle label D9)  strip: 30 px, GRB, brightness 80
-//   LED on/off 500 ms; driven by directLedShow() (bit-banged, not RMT)
-//   burstShots = 5, shotIntervalMs = 500  automaticActions = true at boot
-//   channel = 6 (ESP-NOW)                 cameraMac = 3C:8A:1F:D7:B1:24
-//   Front Module: JPEG broadcast to FF:FF:FF:FF:FF:FF (v1.21) and phone
-//   screens to phone::frontMac = 8C:94:DF:6C:BC:80 (v1.25)
-//   USB serial 460800 baud
-//   Bluetooth name "BikeNav Main", service 6e3b2000-8f7a-4c1e-9b52-2d1c0b7a1f10
+// How v2.0 stays up (the reliability rules; keep them when changing code):
+//   1. The main loop never waits. All USB output goes through one writer
+//      task (namespace usb); the loop only queues it. Before v2.0 a LiDAR
+//      frame or a photo on USB could stall the loop for 100-400 ms.
+//   2. A hang reboots the module: the loop is watched by the ESP32 task
+//      watchdog (5 s). The reason for every restart is printed at power-up
+//      ("INFO BOOT reason: ...").
+//   3. Wi-Fi and Bluetooth keep their memory. Order: radios, then the
+//      close pass's LiDAR clip, then photos. A photo is only stored if
+//      photoHeapReserve (16 KB) plus the room the clip still needs stays free;
+//      the clip only if clipHeapReserve (12 KB) stays free. Photos that don't
+//      fit are skipped (logged), never the radios. An undelivered package is
+//      dropped as soon as a new close pass starts, not after it.
+//   4. Bluetooth and ESP-NOW share one radio: the phone is asked for a 30-50
+//      ms connection interval, photos aren't broadcast to the Front Module
+//      while the phone is connected, and Bluetooth advertising is restarted
+//      if it ever stops while no phone is connected.
+//   5. Every buffer is bounded; when a queue is full the newest diagnostic is
+//      dropped (and counted), never the LiDAR, the lights or the phone link.
 //
-// Provenance: the first four sections are the relay's Detection.h,
-// ScanInput.h, Stl19p.h and Radio.h (identical in v1.13 and v1.21), then
-// TestImage.h and Relay.ino from Rear_v1.21_reconstructed in the team's
-// "BikeNav_PreBluetooth_Source" bundle (25 Nov 2026). That v1.21 is a
-// RECONSTRUCTION of Oscar's LED patch on the recovered v1.20 sketch; the
-// original Mac source was not available. Every v1.25 change to that code is
-// marked "v1.25:". The phone link is new code in the last two sections.
+// Compatibility: USB commands and lines, ESP-NOW packets (camera, Front
+// Module) and the Bluetooth protocol (Phone App/SPECIFICATION.md section 3)
+// are unchanged from v1.29. The LiDAR decoding and both detectors (the first
+// three sections) are byte-for-byte the tuned v1.13/v1.21 code.
+//
+// Settings at a glance: see "Settings" at the top of the Application section
+// and of namespace phone. Pins: LED data GPIO2 (FireBeetle D9), LiDAR GPIO16.
+// ESP-NOW channel 6. Camera 3C:8A:1F:D7:B1:24, Front 8C:94:DF:6C:BC:80.
+//
+// History: v1.13 (backup) -> v1.21 (LED patch, reconstructed) -> v1.25 (phone
+// link) -> v1.26 (Oscar: USB image debugger) -> v1.28/v1.29 (fixes) -> v2.0.
 // =============================================================================
 
 #include <algorithm>
@@ -74,11 +77,13 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdarg>
+#include <cstdio>
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <atomic>
 #include <soc/gpio_reg.h>
 #include <soc/soc.h>
@@ -88,7 +93,7 @@
 #include <esp_idf_version.h>
 
 // ==========================================================================
-// From Detection.h (v1.13 = v1.21, unchanged)
+// LiDAR detectors (Detection.h from v1.13/v1.21; unchanged, tuned logic)
 // ==========================================================================
 
 namespace lidar {
@@ -318,7 +323,7 @@ class Detector {
 }
 
 // ==========================================================================
-// From ScanInput.h (v1.13 = v1.21, unchanged)
+// Replayed scans from USB (ScanInput.h from v1.13/v1.21; unchanged)
 // ==========================================================================
 
 namespace lidar {
@@ -396,7 +401,7 @@ class ScanInput {
 }
 
 // ==========================================================================
-// From Stl19p.h (v1.13 = v1.21, unchanged)
+// STL-19P LiDAR decoder (Stl19p.h from v1.13/v1.21; unchanged)
 // ==========================================================================
 
 namespace lidar {
@@ -537,7 +542,7 @@ class Stl19p {
 }
 
 // ==========================================================================
-// From Radio.h (v1.13 = v1.21; one v1.25 change, marked)
+// ESP-NOW packets and radio start (Radio.h from v1.13/v1.21; one v1.25 change, marked)
 // ==========================================================================
 
 constexpr uint8_t channel = 6;
@@ -879,35 +884,77 @@ const uint8_t debugJpeg[] = {
 };
 
 // ==========================================================================
-// From Relay.ino (reconstructed v1.21; v1.25 changes marked)
+// Application (v2.0). Rewritten from the v1.21 relay + v1.25-v1.29 changes:
+// same commands, lines and packets; new structure for reliability.
 // ==========================================================================
 
-QueueHandle_t replies;
-QueueHandle_t displayAcks;
-struct DisplayAck { uint32_t magic, token, size, status; };
+// ---- Settings -------------------------------------------------------------------
+constexpr unsigned burstShots = 5;            // photos per close pass
+constexpr unsigned shotIntervalMs = 500;      // between photo requests
+constexpr uint8_t ledDataPin = 2;             // FireBeetle D9
+constexpr uint16_t ledCount = 30;             // WS2813, GRB
+constexpr uint8_t ledBrightness = 80;         // of 255
+constexpr uint32_t ledPhaseMs = 500;          // red on / off
+constexpr uint32_t warningHoldMs = 2000;      // a warning lasts this long after its last renewal
+constexpr unsigned ledTestCycles = 3;         // 'C' and power-up: on/off cycles
+constexpr uint32_t liveEveryMs = 200;         // LIVE scan output to USB at most this often
+constexpr uint32_t healthEveryMs = 1000;      // DEBUG HEALTH
+constexpr uint32_t heapEveryMs = 10000;       // DEBUG HEAP
+constexpr uint32_t watchEveryMs = 2000;       // DEBUG WATCH (separate task)
+constexpr size_t photoHeapReserve = 16 * 1024;  // v2.2: a photo never takes the last 16 KB (was 40)
+constexpr unsigned usbBytesPerLoop = 1024;    // USB input handled per loop pass
+constexpr unsigned lidarBytesPerLoop = 2048;  // LiDAR UART bytes handled per loop pass
+const uint8_t displayBroadcast[] = {255, 255, 255, 255, 255, 255};
+
+// ---- Shared types ---------------------------------------------------------------
+// The Front Module's 16-byte ack for a JPEG ("DISP", token, size, status).
+struct DisplayAck {
+  uint32_t magic, token, size, status;
+};
 constexpr uint32_t ackMagic = 0x44495350;
-struct AckEvent { DisplayAck ack; uint8_t mac[6]; };
-uint32_t lidarBytes=0, lidarScans=0, lastDebugAt=0;
-bool radioReady;
-bool displayRadioReady;
-const uint8_t displayBroadcast[] = {255,255,255,255,255,255};
-unsigned displayDrops = 0;
+struct AckEvent {
+  DisplayAck ack;
+  uint8_t mac[6];
+};
+
+struct Photo {
+  uint8_t *bytes;
+  uint32_t size;
+  const char *error;
+  uint32_t burst;     // 0 = test photo
+  unsigned shot;
+  uint32_t takenAt;   // millis() when requested
+
+  Photo(uint8_t *data = nullptr, uint32_t length = 0, const char *message = nullptr)
+      : bytes(data), size(length), error(message), burst(0), shot(0), takenAt(0) {}
+};
+
+// Declared here so the Arduino IDE doesn't put its own prototypes above
+// struct Photo (the sketch is one file).
+Photo capture();
+void forwardDisplay(const Photo &photo);
+void deliverPhoto(Photo &photo);
+// v2.2: memory a close pass's LiDAR clip still needs; photos leave it free.
+std::atomic<uint32_t> clipHeapPending{0};
+
+// The phone link (namespace phone, at the end of the file).
+namespace phone {
+void begin();
+void service();
+void onScan(uint32_t now);
+void onClosePass(uint32_t now, bool burstStarted, bool simulated);
+void cameraResult(bool ok);
+bool keepPhoto(const Photo &photo);
+bool bluetoothStarted();
+bool isConnected();
+}
+
+// ---- State ----------------------------------------------------------------------
+QueueHandle_t replies;       // camera replies, from the ESP-NOW callback
+QueueHandle_t displayAcks;   // Front Module acks, from the ESP-NOW callback
+bool radioReady;             // ESP-NOW started (camera peer added)
+bool displayRadioReady;      // broadcast peer added (photos to the Front Module)
 TaskHandle_t photoTask;
-QueueHandle_t photos;
-SemaphoreHandle_t serialOutput;
-TaskHandle_t ledTaskHandle = nullptr;
-std::atomic<bool> pulseReportPending{false};
-bool versionPending;
-// v1.25: was false (photos and lights only after the computer sent 'A').
-// On the bike there is no computer, so they are on from power-up. 'M' still
-// turns them off.
-bool automaticActions = true;
-uint32_t lastLiveOutput = 0;
-std::atomic<uint32_t> loopCounter{0};
-std::atomic<uint32_t> loopStage{0};
-void debugLine(const char *message);
-constexpr uint32_t ledManualBit = 1;
-constexpr uint32_t ledWarningBit = 2;
 lidar::ScanInput scanInput;
 lidar::Detector detector;
 lidar::Stl19p liveLidar;
@@ -923,203 +970,236 @@ bool scanPending;
 bool approachWasActive;
 unsigned closeEvents;
 unsigned approachEvents;
-bool cameraTaskError;
+bool automaticActions = true;   // v1.20/v1.21 started with false (needed 'A' from a computer)
+bool versionPending;
+std::atomic<bool> pulseReportPending{false};
+std::atomic<bool> cameraTaskError{false};
+std::atomic<unsigned> skippedBursts{0};
 std::atomic<bool> burstActive{false};
 std::atomic<TickType_t> burstStart{0};
+uint32_t burstSequence;
+std::atomic<uint32_t> lidarBytes{0}, lidarScans{0};
+std::atomic<uint32_t> loopCounter{0}, loopStage{0};
+uint32_t lastLiveAt, lastHealthAt, lastHeapAt;
 constexpr uint32_t captureBurstBit = 1;
 constexpr uint32_t testCameraBit = 2;
 constexpr uint32_t testDisplayBit = 4;
-unsigned skippedBursts;
-uint32_t burstSequence;
-constexpr unsigned burstShots = 5;  // v1.25: was 10 (the phone gets the photos)
-constexpr unsigned shotIntervalMs = 500;
-constexpr uint32_t pulseMs = 500;
-constexpr uint8_t ledDataPin = 2; // FireBeetle D9
-constexpr uint8_t ledBrightness = 80;
 
-struct Photo {
-  uint8_t *bytes;
-  uint32_t size;
-  const char *error;
-  uint32_t burst;
-  unsigned shot;
-  uint32_t takenAt = 0;  // v1.25: millis() when the photo was requested
+// =================================================================================
+// USB output. Exactly one task (usb::writer) writes to Serial; everyone else
+// queues and never waits (rule 1). Large writes go out in slices that fit the
+// UART buffer, so Serial.read() in the loop is never held up behind them.
+// =================================================================================
+namespace usb {
 
-  Photo(uint8_t *data = nullptr, uint32_t length = 0, const char *message = nullptr)
-      : bytes(data), size(length), error(message), burst(0), shot(0) {}
+constexpr size_t textBytes = 120;    // v2.1: was 136
+constexpr unsigned queueDepth = 24;  // v2.1: was 48
+enum class Kind : uint8_t { text, photo, frame };
+struct Item {
+  Kind kind;
+  Photo photo;
+  char text[textBytes];
 };
 
-Photo capture();
-// v1.25: declared here because, merged into one file, the Arduino IDE would
-// otherwise put its own prototype for this above struct Photo.
-void forwardDisplay(const Photo &photo);
+QueueHandle_t queue;
+std::atomic<uint32_t> dropped{0};
 
-// v1.25: the phone link (defined in the "Phone link" section at the end).
-namespace phone {
-void begin();
-void service();
-void onScan(uint32_t now);
-void onClosePass(uint32_t now, bool burstStarted, bool simulated);
-void cameraResult(bool ok);
-bool keepPhoto(const Photo &photo);
-bool bluetoothStarted();
+// One large buffer for the newest LIVE scan or SCAN line. The loop fills it
+// only when the writer has finished the previous one (frameBusy false).
+std::atomic<bool> frameBusy{false};
+char frameHeader[96];
+uint8_t frameData[lidar::ScanInput::maxPoints * 5 + 64];  // v2.1: was * 8
+size_t frameLength;
+
+bool push(const Item &item) {
+  if (queue && xQueueSend(queue, &item, 0) == pdTRUE) return true;
+  ++dropped;
+  return false;
 }
 
-Adafruit_NeoPixel strip(30, ledDataPin, NEO_GRB + NEO_KHZ800);
+void vlinef(const char *format, va_list args) {
+  Item item;
+  item.kind = Kind::text;
+  vsnprintf(item.text, sizeof(item.text), format, args);
+  push(item);
+}
 
+void linef(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  vlinef(format, args);
+  va_end(args);
+}
 
-// Drive the strip directly on GPIO2 as in the v1.21 local patch. Feed GRB
-// bytes already scaled by NeoPixel. Interrupts are masked for one 30-pixel frame.
-static portMUX_TYPE ledLock=portMUX_INITIALIZER_UNLOCKED;
+void line(const char *text) { linef("%s", text); }
+
+// A photo (or a photo error) for USB; the writer then hands it on to the phone
+// link or frees it. Waits up to `wait` for space, because photos aren't
+// dropped silently. Returns false if it wasn't queued: the caller frees it.
+bool photo(const Photo &p, TickType_t wait) {
+  Item item;
+  item.kind = Kind::photo;
+  item.photo = p;
+  item.text[0] = 0;
+  if (queue && xQueueSend(queue, &item, wait) == pdTRUE) return true;
+  ++dropped;
+  return false;
+}
+
+// The loop asks for the frame buffer; if the previous frame is still being
+// written it gets false and tries again on a later pass (newest wins).
+bool claimFrame() { return !frameBusy.load(); }
+void sendFrame() {
+  frameBusy = true;
+  Item item;
+  item.kind = Kind::frame;
+  item.text[0] = 0;
+  if (!push(item)) frameBusy = false;
+}
+
+void writeAll(const uint8_t *data, size_t length) {
+  while (length) {
+    size_t room = Serial.availableForWrite();
+    if (!room) {
+      vTaskDelay(1);
+      continue;
+    }
+    const size_t n = std::min(room, length);
+    Serial.write(data, n);
+    data += n;
+    length -= n;
+  }
+}
+
+void writeLine(const char *text) {
+  writeAll(reinterpret_cast<const uint8_t *>(text), strlen(text));
+  writeAll(reinterpret_cast<const uint8_t *>("\n"), 1);
+}
+
+void writePhoto(Photo &p) {
+  char header[96];
+  if (p.error && !p.burst) snprintf(header, sizeof(header), "ERR Camera test: %s", p.error);
+  else if (p.error)
+    snprintf(header, sizeof(header), "ERR Burst %lu photo %u/%u: %s", static_cast<unsigned long>(p.burst), p.shot,
+             burstShots, p.error);
+  else
+    snprintf(header, sizeof(header), "JPEG %u %lu %u", static_cast<unsigned>(p.size),
+             static_cast<unsigned long>(p.burst), p.shot);
+  writeLine(header);
+  if (!p.error && p.bytes) writeAll(p.bytes, p.size);
+  // Burst photos (and burst errors, so every shot is counted) go to the
+  // phone link, which then owns the bytes; everything else is freed here.
+  if (!(p.burst && phone::keepPhoto(p))) free(p.bytes);
+}
+
+void writer(void *) {
+  for (;;) {
+    Item item;
+    if (xQueueReceive(queue, &item, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      switch (item.kind) {
+        case Kind::text:
+          writeLine(item.text);
+          break;
+        case Kind::photo:
+          writePhoto(item.photo);
+          break;
+        case Kind::frame:
+          if (frameHeader[0]) writeLine(frameHeader);
+          writeAll(frameData, frameLength);
+          frameBusy = false;
+          break;
+      }
+    }
+    const uint32_t lost = dropped.exchange(0);
+    if (lost) {
+      char text[64];
+      snprintf(text, sizeof(text), "INFO USB OUTPUT DROPPED %lu", static_cast<unsigned long>(lost));
+      writeLine(text);
+    }
+  }
+}
+
+bool begin() {
+  queue = xQueueCreate(queueDepth, sizeof(Item));
+  return queue && xTaskCreatePinnedToCore(writer, "usbWriter", 4096, nullptr, 1, nullptr, 1) == pdPASS;
+}
+
+}  // namespace usb
+
+void debugLine(const char *message) { usb::line(message); }  // never waits (v2.0)
+
+// =================================================================================
+// LED strip. The v1.21 bit-banged driver on GPIO2 (proven on the bike), owned
+// by the loop. Interrupts on this core are held off for about 1 ms per update;
+// Wi-Fi and Bluetooth run on the other core.
+// =================================================================================
+Adafruit_NeoPixel strip(ledCount, ledDataPin, NEO_GRB + NEO_KHZ800);
+static portMUX_TYPE ledLock = portMUX_INITIALIZER_UNLOCKED;
+
 void IRAM_ATTR directLedShow() {
-  const uint32_t cyclesPerUs=getCpuFrequencyMhz();
-  const uint32_t bitCycles=cyclesPerUs*5/4;
-  const uint32_t highOne=cyclesPerUs*8/10, highZero=cyclesPerUs*35/100;
-  const uint32_t mask=1u<<ledDataPin;
-  const uint8_t *pixels=strip.getPixels();
-  const unsigned size=strip.numPixels()*3;
-  if(!pixels) return;
-  delayMicroseconds(300);
+  const uint32_t cyclesPerUs = getCpuFrequencyMhz();
+  const uint32_t bitCycles = cyclesPerUs * 5 / 4;               // 1.25 us per bit
+  const uint32_t highOne = cyclesPerUs * 8 / 10, highZero = cyclesPerUs * 35 / 100;
+  const uint32_t mask = 1u << ledDataPin;
+  const uint8_t *pixels = strip.getPixels();
+  const unsigned size = strip.numPixels() * 3;
+  if (!pixels) return;
+  delayMicroseconds(300);  // reset gap
   portENTER_CRITICAL(&ledLock);
-  for(unsigned i=0;i<size;++i) {
-    for(uint8_t bit=0x80;bit;bit>>=1) {
-      uint32_t high=(pixels[i]&bit)?highOne:highZero;
-      uint32_t t=XTHAL_GET_CCOUNT();
-      REG_WRITE(GPIO_OUT_W1TS_REG,mask);
-      while(uint32_t(XTHAL_GET_CCOUNT()-t)<high) {}
-      REG_WRITE(GPIO_OUT_W1TC_REG,mask);
-      while(uint32_t(XTHAL_GET_CCOUNT()-t)<bitCycles) {}
+  for (unsigned i = 0; i < size; ++i) {
+    for (uint8_t bit = 0x80; bit; bit >>= 1) {
+      const uint32_t high = (pixels[i] & bit) ? highOne : highZero;
+      const uint32_t t = XTHAL_GET_CCOUNT();
+      REG_WRITE(GPIO_OUT_W1TS_REG, mask);
+      while (uint32_t(XTHAL_GET_CCOUNT() - t) < high) {}
+      REG_WRITE(GPIO_OUT_W1TC_REG, mask);
+      while (uint32_t(XTHAL_GET_CCOUNT() - t) < bitCycles) {}
     }
   }
   portEXIT_CRITICAL(&ledLock);
   delayMicroseconds(300);
 }
 
-// LED output owned exclusively by the Arduino loop, like the known-good sketch.
-uint32_t warningAt=0, ledChangedAt=0;
-bool warning=false, ledOn=false;
-unsigned manualCycles=0;
+uint32_t warningAt, ledChangedAt;
+bool warning, ledOn;
+unsigned manualCycles;
+
 void extendWarning(bool manual) {
-  if (manual) { manualCycles=3; ledChangedAt=millis()-500; }
-  else { warning=true; warningAt=millis(); }
+  if (manual) {
+    manualCycles = ledTestCycles;
+    ledChangedAt = millis() - ledPhaseMs;  // start at once
+  } else {
+    warning = true;
+    warningAt = millis();
+  }
 }
-void serviceLed() {
-  if (warning && millis()-warningAt>=2000) warning=false;
-  if (millis()-ledChangedAt<500) return;
+
+void serviceLed(uint32_t now) {
+  if (warning && now - warningAt >= warningHoldMs) warning = false;
+  if (now - ledChangedAt < ledPhaseMs) return;
   if (!ledOn && !manualCycles && !warning) return;
-  ledChangedAt=millis();
-  if (!ledOn) { strip.fill(strip.Color(255,0,0)); directLedShow(); ledOn=true; }
-  else { strip.clear(); directLedShow(); ledOn=false;
-    if (manualCycles && --manualCycles==0) pulseReportPending.store(true);
-  }
-}
-// The manual test uses the proven standalone sequence, not the warning state machine.
-void manualLedTest() {
-  debugLine("INFO LED TEST START GPIO2 30 PIXELS BRIGHTNESS80");
-  warning = false; manualCycles = 0; ledOn = false;
-  strip.setBrightness(80);
-  for (unsigned i=0; i<3; ++i) {
-    loopStage.store(10);
-    debugLine("INFO LED BEFORE RED SHOW");
-    strip.fill(strip.Color(255,0,0)); directLedShow();
-    loopStage.store(11);
-    debugLine("INFO LED AFTER RED SHOW");
-    delay(500);
-    loopStage.store(12);
-    strip.clear(); directLedShow();
-    loopStage.store(13);
-    debugLine("INFO LED AFTER CLEAR SHOW");
-    delay(500);
-  }
-  ledChangedAt=millis();
-  pulseReportPending.store(true);
-  loopStage.store(0);
-}
-
-// Independent heartbeat reveals a stalled Arduino loop rather than merely disabling buttons.
-void diagnosticWatch(void *) {
-  for (;;) {
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    if (serialOutput && xSemaphoreTake(serialOutput, pdMS_TO_TICKS(50)) == pdTRUE) {
-      Serial.printf("DEBUG WATCH %lu %lu\n", (unsigned long)loopCounter.load(), (unsigned long)loopStage.load());
-      xSemaphoreGive(serialOutput);
-    }
+  ledChangedAt = now;
+  if (!ledOn) {
+    strip.fill(strip.Color(255, 0, 0));
+    directLedShow();
+    ledOn = true;
+  } else {
+    strip.clear();
+    directLedShow();
+    ledOn = false;
+    if (manualCycles && --manualCycles == 0) pulseReportPending = true;
   }
 }
 
-void reportStatus() {
-  if (serialOutput && xSemaphoreTake(serialOutput, 0) == pdTRUE) {
-    AckEvent event;
-    while (displayAcks && xQueueReceive(displayAcks, &event, 0) == pdTRUE) {
-      Serial.printf("DEBUG DISPLAY_ACK %lu %lu %lu %02X:%02X:%02X:%02X:%02X:%02X\n", (unsigned long)event.ack.token, (unsigned long)event.ack.size, (unsigned long)event.ack.status, event.mac[0],event.mac[1],event.mac[2],event.mac[3],event.mac[4],event.mac[5]);
-    }
-    if (millis()-lastDebugAt >= 1000) { lastDebugAt=millis(); Serial.printf("DEBUG HEALTH %lu %lu %u %u %u %u\n",(unsigned long)lidarBytes,(unsigned long)lidarScans,(unsigned)ESP.getFreeHeap(), (unsigned)burstActive.load(), (unsigned)radioReady,(unsigned)displayRadioReady); }
-    xSemaphoreGive(serialOutput);
-  }
-  if ((!versionPending && !pulseReportPending.load() && !scanPending && !closeEvents &&
-       !approachEvents && !cameraTaskError && !skippedBursts) || !serialOutput ||
-      xSemaphoreTake(serialOutput, 0) != pdTRUE) return;
-  if (versionPending) {
-    // The version line stays "1.20" (as in v1.21) so existing viewers still
-    // recognise the board; v1.25 adds the phone-link line after it.
-    Serial.println(radioReady ? "READY 1.20 RADIO OK" : "READY 1.20 RADIO ERROR");
-    Serial.println(displayRadioReady ? "INFO DISPLAY RELAY READY" : "INFO DISPLAY RELAY ERROR");
-    Serial.println(phone::bluetoothStarted() ? "INFO PHONE LINK 1.28 BLUETOOTH READY"  // v1.28: was 1.25
-                                             : "INFO PHONE LINK 1.28 BLUETOOTH ERROR");
-    Serial.println("USB IMAGE READY 1.26");
-    versionPending = false;
-  }
-  if (pulseReportPending.exchange(false)) {
-    Serial.println("OK LED PULSE GPIO2");
-  }
-  if (closeEvents || approachEvents) {
-    Serial.printf("EVENT %u %u\n", closeEvents, approachEvents);
-    closeEvents = approachEvents = 0;
-  }
-  if (skippedBursts) {
-    Serial.printf("INFO %u close pass(es) during an active photo burst\n", skippedBursts);
-    skippedBursts = 0;
-  }
-  if (cameraTaskError) {
-    Serial.println("ERR Photo task failed to start");
-    cameraTaskError = false;
-  }
-  if (scanPending && liveScan && millis()-lastLiveOutput >= 200) {
-    lastLiveOutput=millis();
-    static uint8_t payload[lidar::ScanInput::maxPoints * 5];
-    for (size_t i = 0; i < scanPoints.size(); ++i) {
-      const auto &p = scanPoints[i];
-      const uint16_t x = static_cast<int16_t>(std::lround(p.x * 1000));
-      const uint16_t y = static_cast<int16_t>(std::lround(p.y * 1000));
-      payload[5 * i] = x;
-      payload[5 * i + 1] = x >> 8;
-      payload[5 * i + 2] = y;
-      payload[5 * i + 3] = y >> 8;
-      payload[5 * i + 4] = 0;
-    }
-    for (uint16_t i : scanResult.closePoints) payload[5 * i + 4] = 1;
-    for (uint16_t i : scanResult.approachPoints) payload[5 * i + 4] = 2;
-    Serial.printf("LIVE %lu %d %d %.1f %u\n", static_cast<unsigned long>(liveLidar.stamp),
-                  scanResult.close, scanResult.incoming, scanResult.speed * 3.6f,
-                  unsigned(scanPoints.size()));
-    Serial.write(payload, scanPoints.size() * 5);
-    scanPending = false;
-  }
-  if (scanPending && !liveScan) {
-    Serial.printf("SCAN %lu %d %d %.1f", static_cast<unsigned long>(scanId),
-                  scanResult.close, scanResult.incoming, scanResult.speed * 3.6f);
-    for (uint16_t i : scanResult.closePoints) Serial.printf(" +%u", unsigned(i));
-    for (uint16_t i : scanResult.approachPoints) Serial.printf(" -%u", unsigned(i));
-    Serial.println();
-    scanPending = false;
-  }
-  xSemaphoreGive(serialOutput);
-}
-
+// =================================================================================
+// Camera (capture task) and photos to the Front Module.
+// =================================================================================
 void receiveReply(const esp_now_recv_info_t *info, const uint8_t *data, int size) {
   if (size == sizeof(DisplayAck) && displayAcks) {
-    AckEvent event; memcpy(&event.ack,data,sizeof(DisplayAck)); memcpy(event.mac,info->src_addr,6);
-    if (event.ack.magic == ackMagic && memcmp(info->src_addr,cameraMac,6)) xQueueSend(displayAcks,&event,0);
+    AckEvent event;
+    memcpy(&event.ack, data, sizeof(DisplayAck));
+    memcpy(event.mac, info->src_addr, 6);
+    if (event.ack.magic == ackMagic && memcmp(info->src_addr, cameraMac, 6)) xQueueSend(displayAcks, &event, 0);
     return;
   }
   if (size != sizeof(Reply) || memcmp(info->src_addr, cameraMac, 6)) return;
@@ -1134,32 +1214,30 @@ bool requestChunk(Request request, Reply &reply) {
     const uint32_t wait = request.offset == 0 ? 600 : 50;
     const uint32_t start = millis();
     while (millis() - start < wait) {
-      if (xQueueReceive(replies, &reply, pdMS_TO_TICKS(5)) == pdTRUE &&
-          reply.request.token == request.token &&
-          reply.request.offset == request.offset) return true;
+      if (xQueueReceive(replies, &reply, pdMS_TO_TICKS(5)) == pdTRUE && reply.request.token == request.token &&
+          reply.request.offset == request.offset)
+        return true;
     }
   }
   return false;
 }
 
-void debugLine(const char *message) {
-  if (serialOutput && xSemaphoreTake(serialOutput, portMAX_DELAY) == pdTRUE) {
-    Serial.println(message); xSemaphoreGive(serialOutput);
-  }
-}
 Photo capture() {
   debugLine("DEBUG CAMERA_REQUEST");
   if (!radioReady) return {nullptr, 0, "Relay radio failed to start"};
   xQueueReset(replies);
   Request request = {esp_random() | 1U, 0};
   Reply reply;
-  if (!requestChunk(request, reply))
-    return {nullptr, 0, "Camera did not answer ESP-NOW"};
+  if (!requestChunk(request, reply)) return {nullptr, 0, "Camera did not answer ESP-NOW"};
   debugLine("DEBUG CAMERA_HEADER_RECEIVED");
   const uint32_t size = reply.total;
-  if (!size || size > maxJpeg)
-    return {nullptr, 0, "Camera could not capture the JPEG"};
-
+  if (!size || size > maxJpeg) return {nullptr, 0, "Camera could not capture the JPEG"};
+  // v2.0 (rule 3): Wi-Fi and Bluetooth need free memory to keep working.
+  // v2.2: one free block must hold the photo, and the radios' reserve plus
+  // any LiDAR clip still being collected must stay free afterwards.
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < size + 512 ||
+      heap_caps_get_free_size(MALLOC_CAP_8BIT) < size + photoHeapReserve + clipHeapPending.load())
+    return {nullptr, 0, "Relay ran out of memory"};
   uint8_t *jpeg = static_cast<uint8_t *>(malloc(size));
   if (!jpeg) return {nullptr, 0, "Relay ran out of memory"};
   const uint32_t transferAt = millis();
@@ -1169,7 +1247,7 @@ Photo capture() {
       free(jpeg);
       return {nullptr, 0, "Lost a JPEG packet between camera and relay"};
     }
-    const size_t length = min(chunkSize, size_t(size - request.offset));
+    const size_t length = std::min<size_t>(chunkSize, size - request.offset);
     memcpy(jpeg + request.offset, reply.bytes, length);
     request.offset += length;
   }
@@ -1177,34 +1255,48 @@ Photo capture() {
   return {jpeg, size, nullptr};
 }
 
-// Forward each complete JPEG as the same 236-byte packet format used by the camera.
-// Runs in the capture task, never in the LiDAR loop or Wi-Fi callback.
+// Broadcasts a JPEG to the Front Module in camera-reply packets (v1.20).
+// Skipped while the phone is connected: the Front Module then shows the
+// phone's screens and ignores photos, and the radio is needed (rule 4).
 void forwardDisplay(const Photo &photo) {
   if (photo.error || !photo.bytes || !photo.size) return;
-  if (!displayRadioReady) { debugLine("DEBUG DISPLAY_RADIO_UNAVAILABLE"); return; }
-  char msg[120]; unsigned sent=0;
+  if (phone::isConnected()) {
+    debugLine("DEBUG DISPLAY_SKIPPED_PHONE_CONNECTED");
+    return;
+  }
+  if (!displayRadioReady) {
+    debugLine("DEBUG DISPLAY_RADIO_UNAVAILABLE");
+    return;
+  }
+  const unsigned parts = (photo.size + chunkSize - 1) / chunkSize;
+  unsigned sent = 0;
   Reply packet = {};
   packet.request.token = esp_random() | 1U;
   packet.total = photo.size;
-  snprintf(msg,sizeof(msg),"DEBUG DISPLAY_BEGIN %lu %lu %lu",(unsigned long)packet.request.token,(unsigned long)photo.size,(unsigned long)((photo.size+chunkSize-1)/chunkSize)); debugLine(msg);
+  usb::linef("DEBUG DISPLAY_BEGIN %lu %lu %u", static_cast<unsigned long>(packet.request.token),
+             static_cast<unsigned long>(photo.size), parts);
   for (uint32_t offset = 0; offset < photo.size; offset += chunkSize) {
     packet.request.offset = offset;
     memset(packet.bytes, 0, sizeof(packet.bytes));
-    memcpy(packet.bytes, photo.bytes + offset, min(chunkSize, size_t(photo.size - offset)));
+    memcpy(packet.bytes, photo.bytes + offset, std::min<size_t>(chunkSize, photo.size - offset));
     bool queued = false;
-    for (int attempt = 0; attempt < 3; ++attempt) {
-      if (esp_now_send(displayBroadcast, reinterpret_cast<const uint8_t *>(&packet), sizeof(packet)) == ESP_OK) {
-        queued = true;
-        break;
-      }
-      vTaskDelay(pdMS_TO_TICKS(5) + 1);
+    for (int attempt = 0; attempt < 3 && !queued; ++attempt) {
+      queued = esp_now_send(displayBroadcast, reinterpret_cast<const uint8_t *>(&packet), sizeof(packet)) == ESP_OK;
+      if (!queued) vTaskDelay(pdMS_TO_TICKS(5) + 1);
     }
-    if (!queued) { ++displayDrops; break; }
+    if (!queued) break;
     ++sent;
-    // Pace packets so the Wi-Fi queue can drain; broadcast has no delivery ACK.
-    vTaskDelay(pdMS_TO_TICKS(4) + 1);
+    vTaskDelay(pdMS_TO_TICKS(4) + 1);  // let the Wi-Fi queue drain; broadcast has no ACK
   }
-  snprintf(msg,sizeof(msg),"DEBUG DISPLAY_END %lu %u %lu",(unsigned long)packet.request.token,sent,(unsigned long)((photo.size+chunkSize-1)/chunkSize)); debugLine(msg);
+  usb::linef("DEBUG DISPLAY_END %lu %u %u", static_cast<unsigned long>(packet.request.token), sent, parts);
+}
+
+// Hands a finished photo on: Front Module (when no phone), then USB, then
+// (from the USB writer) the phone link. Never loses the memory.
+void deliverPhoto(Photo &photo) {
+  phone::cameraResult(!photo.error);
+  forwardDisplay(photo);
+  if (!usb::photo(photo, pdMS_TO_TICKS(5000))) free(photo.bytes);
 }
 
 void captureBurst(TickType_t lastRequest) {
@@ -1212,15 +1304,14 @@ void captureBurst(TickType_t lastRequest) {
   for (unsigned shot = 1; shot <= burstShots; ++shot) {
     vTaskDelayUntil(&lastRequest, pdMS_TO_TICKS(shotIntervalMs));
     lastRequest = xTaskGetTickCount();
-    const uint32_t takenAt = millis();  // v1.25
+    const uint32_t takenAt = millis();
     Photo photo = capture();
-    photo.takenAt = takenAt;  // v1.25
+    photo.takenAt = takenAt;
     photo.burst = burst;
     photo.shot = shot;
-    forwardDisplay(photo);
-    xQueueSend(photos, &photo, portMAX_DELAY);
+    deliverPhoto(photo);
   }
-  burstActive.store(false);
+  burstActive = false;
 }
 
 void capturePhotos(void *) {
@@ -1230,71 +1321,20 @@ void capturePhotos(void *) {
     if (commands & captureBurstBit) captureBurst(burstStart.load());
     if (commands & testDisplayBit) {
       debugLine("DEBUG DISPLAY_TEST_KNOWN_IMAGE");
-      Photo test(const_cast<uint8_t*>(debugJpeg),sizeof(debugJpeg)); forwardDisplay(test);
+      Photo test(const_cast<uint8_t *>(debugJpeg), sizeof(debugJpeg));
+      forwardDisplay(test);  // flash constant: never freed
     }
     if (commands & testCameraBit) {
-      const uint32_t takenAt = millis();  // v1.25
+      const uint32_t takenAt = millis();
       Photo photo = capture();
-      photo.takenAt = takenAt;  // v1.25
+      photo.takenAt = takenAt;
       photo.shot = 1;
-      forwardDisplay(photo);
-      xQueueSend(photos, &photo, portMAX_DELAY);
+      deliverPhoto(photo);
     }
   }
 }
 
-void sendPhotos(void *) {
-  for (;;) {
-    Photo photo;
-    xQueueReceive(photos, &photo, portMAX_DELAY);
-    phone::cameraResult(!photo.error);  // v1.25
-    xSemaphoreTake(serialOutput, portMAX_DELAY);
-    if (photo.error && !photo.burst) Serial.printf("ERR Camera test: %s\n", photo.error);
-    else if (photo.error)
-      Serial.printf("ERR Burst %lu photo %u/%u: %s\n",
-                    static_cast<unsigned long>(photo.burst), photo.shot, burstShots, photo.error);
-    else {
-      Serial.printf("JPEG %u %lu %u\n", static_cast<unsigned>(photo.size),
-                    static_cast<unsigned long>(photo.burst), photo.shot);
-      Serial.write(photo.bytes, photo.size);
-    }
-    xSemaphoreGive(serialOutput);
-    // v1.25: burst photos (and burst errors, so every shot is counted) go to
-    // the phone link, which then owns the bytes. Was: free(photo.bytes).
-    if (!(photo.burst && phone::keepPhoto(photo))) free(photo.bytes);
-  }
-}
-
-void setup() {
-  Serial.setRxBufferSize(8192);
-  Serial.begin(460800);
-  strip.begin(); strip.setBrightness(80);
-  strip.clear(); directLedShow();
-#ifdef LIDAR_RX_PIN
-  lidarUart.setRxBufferSize(8192);
-  lidarUart.begin(230400, SERIAL_8N1, LIDAR_RX_PIN, -1);
-#endif
-
-  replies = xQueueCreate(8, sizeof(Reply));
-  displayAcks = xQueueCreate(16,sizeof(AckEvent));
-  radioReady = replies && startRadio(cameraMac, receiveReply);
-  if (radioReady) {
-    esp_now_peer_info_t displayPeer = {};
-    memcpy(displayPeer.peer_addr, displayBroadcast, 6);
-    displayPeer.channel = channel;
-    displayPeer.ifidx = WIFI_IF_STA;
-    displayRadioReady = esp_now_add_peer(&displayPeer) == ESP_OK;
-  }
-  photos = xQueueCreate(2, sizeof(Photo));
-  serialOutput = xSemaphoreCreateMutex();
-  if (serialOutput) xTaskCreate(diagnosticWatch, "diagWatch", 4096, nullptr, 1, nullptr);
-  if (photos && serialOutput &&
-      xTaskCreate(sendPhotos, "sendPhotos", 8192, nullptr, 1, nullptr) == pdPASS)
-    xTaskCreate(capturePhotos, "capturePhotos", 8192, nullptr, 1, &photoTask);
-  phone::begin();  // v1.25
-}
-
-// v1.25: returns whether a new burst started (was void).
+// Returns whether a new burst started.
 bool requestPhotoBurst() {
   if (!photoTask) {
     cameraTaskError = true;
@@ -1304,19 +1344,22 @@ bool requestPhotoBurst() {
     ++skippedBursts;
     return false;
   }
-  burstStart.store(xTaskGetTickCount());
+  burstStart = xTaskGetTickCount();
   xTaskNotify(photoTask, captureBurstBit, eSetBits);
   return true;
 }
 
+// =================================================================================
+// Detection pipeline (loop).
+// =================================================================================
 void processScan(uint32_t stamp) {
   scanResult = detector.processScan(scanPoints, stamp / 1000.0);
   scanPending = true;
-  phone::onScan(millis());  // v1.25: LiDAR clip for the phone
+  phone::onScan(millis());  // LiDAR clip for the phone
   if (scanResult.newClose) {
     ++closeEvents;
-    // v1.25: the phone is alerted even with automatic actions off; the
-    // package then carries the LiDAR clip without photos.
+    // The phone is alerted even with automatic actions off; the package
+    // then carries the LiDAR clip without photos.
     const bool started = automaticActions && requestPhotoBurst();
     phone::onClosePass(millis(), started, false);
   }
@@ -1335,56 +1378,66 @@ void processLidarByte(uint8_t byte, uint32_t now) {
   processScan(liveLidar.stamp);
 }
 
-// USB image debugger: each line is '@' followed by one hex-encoded Reply.
-// Lowercase digits keep a partial line harmless to the legacy command parser.
-static char imageHex[sizeof(Reply)*2];
+// ---- USB input ------------------------------------------------------------------
+// USB image debugger (v1.26, Oscar): '@' + one 236-byte camera-style packet as
+// lowercase hex + '\n' is broadcast to the Front Module. Lowercase only, so a
+// half line can't be mistaken for commands. v1.28: '\r' ignored; every
+// rejected line is answered with "ERR USB IMAGE <reason>".
+static char imageHex[sizeof(Reply) * 2];
 static size_t imageUsed;
 static bool imageLine;
 static uint32_t imageLastByte;
 
 int imageNibble(char c) {
-  if (c >= '0' && c <= '9') return c-'0';
-  if (c >= 'a' && c <= 'f') return c-'a'+10;
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
   return -1;
 }
 
-// v1.28: every rejected line is reported ("ERR USB IMAGE ..."); was silent.
 void imageLineError(const char *why) {
-  char message[96];
-  snprintf(message,sizeof(message),"ERR USB IMAGE %s (%u hex digits)",why,(unsigned)imageUsed);
-  debugLine(message);
+  usb::linef("ERR USB IMAGE %s (%u hex digits)", why, static_cast<unsigned>(imageUsed));
 }
 
 bool readImageByte(uint8_t byte) {
-  if (imageLine && millis()-imageLastByte > 2000) { imageLine=false; imageLineError("line timed out"); }
-  if (byte=='@') { imageLine=true; imageUsed=0; imageLastByte=millis(); return true; }
+  if (imageLine && millis() - imageLastByte > 2000) {
+    imageLine = false;
+    imageLineError("line timed out");
+  }
+  if (byte == '@') {
+    imageLine = true;
+    imageUsed = 0;
+    imageLastByte = millis();
+    return true;
+  }
   if (!imageLine) return false;
-  imageLastByte=millis();
-  if (byte=='\r') return true;  // v1.28: allow CRLF line endings
-  if (byte!='\n') {
-    if (imageUsed<sizeof(imageHex) && imageNibble(byte)>=0) imageHex[imageUsed++]=byte;
+  imageLastByte = millis();
+  if (byte == '\r') return true;
+  if (byte != '\n') {
+    if (imageUsed < sizeof(imageHex) && imageNibble(byte) >= 0) imageHex[imageUsed++] = byte;
     else {
-      imageLine=false;
-      imageLineError(imageUsed<sizeof(imageHex) ? "bad character: use lowercase hex 0-9 a-f" : "line too long: 472 hex digits expected");
+      imageLine = false;
+      imageLineError(imageUsed < sizeof(imageHex) ? "bad character: use lowercase hex 0-9 a-f"
+                                                  : "line too long: 472 hex digits expected");
     }
     return true;
   }
-  imageLine=false;
-  if (imageUsed!=sizeof(imageHex)) { imageLineError("wrong length: 472 hex digits expected"); return true; }
-  Reply packet={};
-  auto *raw=reinterpret_cast<uint8_t*>(&packet);
-  for (size_t i=0;i<sizeof(packet);++i)
-    raw[i]=(imageNibble(imageHex[i*2])<<4)|imageNibble(imageHex[i*2+1]);
-  if (!packet.request.token || packet.total>maxJpeg || packet.request.offset>=packet.total ||
-      packet.request.offset%chunkSize) {
+  imageLine = false;
+  if (imageUsed != sizeof(imageHex)) {
+    imageLineError("wrong length: 472 hex digits expected");
+    return true;
+  }
+  Reply packet = {};
+  auto *raw = reinterpret_cast<uint8_t *>(&packet);
+  for (size_t i = 0; i < sizeof(packet); ++i)
+    raw[i] = (imageNibble(imageHex[i * 2]) << 4) | imageNibble(imageHex[i * 2 + 1]);
+  if (!packet.request.token || packet.total > maxJpeg || packet.request.offset >= packet.total ||
+      packet.request.offset % chunkSize) {
     imageLineError("bad packet: need token != 0, total <= 131072, offset < total and a multiple of 224 (little-endian)");
     return true;
   }
-  esp_err_t result=displayRadioReady ? esp_now_send(displayBroadcast,raw,sizeof(packet)) : ESP_FAIL;
-  char message[96];
-  snprintf(message,sizeof(message),"USBFRAME %lu %lu %d",(unsigned long)packet.request.token,
-           (unsigned long)packet.request.offset,(int)result);
-  debugLine(message);
+  const esp_err_t result = displayRadioReady ? esp_now_send(displayBroadcast, raw, sizeof(packet)) : ESP_FAIL;
+  usb::linef("USBFRAME %lu %lu %d", static_cast<unsigned long>(packet.request.token),
+             static_cast<unsigned long>(packet.request.offset), static_cast<int>(result));
   return true;
 }
 
@@ -1400,16 +1453,21 @@ void receiveInput(uint8_t byte) {
       liveScan = false;
       processScan(stamp);
     }
-    for (size_t i = 0; i < scanInput.rawSize(); ++i)
-      processLidarByte(scanInput.rawData()[i], now);
+    for (size_t i = 0; i < scanInput.rawSize(); ++i) processLidarByte(scanInput.rawData()[i], now);
     return;
   }
-
   switch (byte) {
     case 'V': versionPending = true; break;
     case 'C': extendWarning(true); break;
-    case 'A': automaticActions=true; debugLine("INFO AUTOMATIC ACTIONS ON"); break;
-    case 'M': automaticActions=false; warning=false; debugLine("INFO AUTOMATIC ACTIONS OFF"); break;
+    case 'A':
+      automaticActions = true;
+      debugLine("INFO AUTOMATIC ACTIONS ON");
+      break;
+    case 'M':
+      automaticActions = false;
+      warning = false;
+      debugLine("INFO AUTOMATIC ACTIONS OFF");
+      break;
     case 'T':
       if (photoTask) xTaskNotify(photoTask, testDisplayBit, eSetBits);
       else cameraTaskError = true;
@@ -1418,7 +1476,7 @@ void receiveInput(uint8_t byte) {
       if (photoTask) xTaskNotify(photoTask, testCameraBit, eSetBits);
       else cameraTaskError = true;
       break;
-    case 'X':  // v1.25: pretend a close pass happened, to test the phone link
+    case 'X':  // pretend a close pass happened, to test the phone link
       ++closeEvents;
       phone::onClosePass(now, requestPhotoBurst(), true);
       break;
@@ -1430,26 +1488,162 @@ void receiveInput(uint8_t byte) {
   }
 }
 
-void loop() {
-  static bool startupTest = true;
-  if (startupTest) { startupTest=false; extendWarning(true); }
-  ++loopCounter;
-  loopStage.store(1);
-  serviceLed();
-  for (unsigned i = 0; i < 1024 && Serial.available(); ++i)
-    receiveInput(static_cast<uint8_t>(Serial.read()));
-  loopStage.store(2);
+// ---- USB status output (loop; queues only) ------------------------------------------
+// The newest scan result as a LIVE frame (live LiDAR, at most every
+// liveEveryMs) or a SCAN line (replay). If the writer is still busy with the
+// previous one, the result stays pending and the newest one goes next.
+void publishScan(uint32_t now) {
+  if (!scanPending || !usb::claimFrame()) return;
+  if (liveScan) {
+    if (now - lastLiveAt < liveEveryMs) return;
+    lastLiveAt = now;
+    const size_t n = std::min(scanPoints.size(), lidar::ScanInput::maxPoints);
+    uint8_t *payload = usb::frameData;
+    for (size_t i = 0; i < n; ++i) {
+      const auto &p = scanPoints[i];
+      const uint16_t x = static_cast<int16_t>(std::lround(p.x * 1000));
+      const uint16_t y = static_cast<int16_t>(std::lround(p.y * 1000));
+      payload[5 * i] = x;
+      payload[5 * i + 1] = x >> 8;
+      payload[5 * i + 2] = y;
+      payload[5 * i + 3] = y >> 8;
+      payload[5 * i + 4] = 0;
+    }
+    for (uint16_t i : scanResult.closePoints) if (i < n) payload[5 * i + 4] = 1;
+    for (uint16_t i : scanResult.approachPoints) if (i < n) payload[5 * i + 4] = 2;
+    snprintf(usb::frameHeader, sizeof(usb::frameHeader), "LIVE %lu %d %d %.1f %u",
+             static_cast<unsigned long>(liveLidar.stamp), scanResult.close, scanResult.incoming,
+             scanResult.speed * 3.6f, static_cast<unsigned>(n));
+    usb::frameLength = n * 5;
+  } else {
+    char *out = reinterpret_cast<char *>(usb::frameData);
+    const size_t room = sizeof(usb::frameData);
+    size_t used = snprintf(out, room, "SCAN %lu %d %d %.1f", static_cast<unsigned long>(scanId), scanResult.close,
+                           scanResult.incoming, scanResult.speed * 3.6f);
+    for (uint16_t i : scanResult.closePoints)
+      if (used + 8 < room) used += snprintf(out + used, room - used, " +%u", static_cast<unsigned>(i));
+    for (uint16_t i : scanResult.approachPoints)
+      if (used + 8 < room) used += snprintf(out + used, room - used, " -%u", static_cast<unsigned>(i));
+    out[used++] = '\n';
+    usb::frameHeader[0] = 0;
+    usb::frameLength = used;
+  }
+  scanPending = false;
+  usb::sendFrame();
+}
+
+void publishStatus(uint32_t now) {
+  if (versionPending) {
+    versionPending = false;
+    // These lines are read by tools: keep them exactly (see SPECIFICATION.md).
+    usb::line(radioReady ? "READY 1.20 RADIO OK" : "READY 1.20 RADIO ERROR");
+    usb::line(displayRadioReady ? "INFO DISPLAY RELAY READY" : "INFO DISPLAY RELAY ERROR");
+    usb::line(phone::bluetoothStarted() ? "INFO PHONE LINK 2.2 BLUETOOTH READY" : "INFO PHONE LINK 2.2 BLUETOOTH ERROR");
+    usb::line("USB IMAGE READY 1.26");
+  }
+  if (pulseReportPending.exchange(false)) usb::line("OK LED PULSE GPIO2");
+  if (closeEvents || approachEvents) {
+    usb::linef("EVENT %u %u", closeEvents, approachEvents);
+    closeEvents = approachEvents = 0;
+  }
+  if (const unsigned skipped = skippedBursts.exchange(0)) usb::linef("INFO %u close pass(es) during an active photo burst", skipped);
+  if (cameraTaskError.exchange(false)) usb::line("ERR Photo task failed to start");
+  AckEvent event;
+  while (displayAcks && xQueueReceive(displayAcks, &event, 0) == pdTRUE)
+    usb::linef("DEBUG DISPLAY_ACK %lu %lu %lu %02X:%02X:%02X:%02X:%02X:%02X", static_cast<unsigned long>(event.ack.token),
+               static_cast<unsigned long>(event.ack.size), static_cast<unsigned long>(event.ack.status), event.mac[0],
+               event.mac[1], event.mac[2], event.mac[3], event.mac[4], event.mac[5]);
+  if (now - lastHealthAt >= healthEveryMs) {
+    lastHealthAt = now;
+    usb::linef("DEBUG HEALTH %lu %lu %u %u %u %u", static_cast<unsigned long>(lidarBytes.load()),
+               static_cast<unsigned long>(lidarScans.load()), static_cast<unsigned>(ESP.getFreeHeap()),
+               static_cast<unsigned>(burstActive.load()), static_cast<unsigned>(radioReady),
+               static_cast<unsigned>(displayRadioReady));
+  }
+  if (now - lastHeapAt >= heapEveryMs) {
+    lastHeapAt = now;
+    usb::linef("DEBUG HEAP free=%u min=%u largest=%u uptime=%lu phone=%d", static_cast<unsigned>(ESP.getFreeHeap()),
+               static_cast<unsigned>(ESP.getMinFreeHeap()),
+               static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+               static_cast<unsigned long>(now / 1000), phone::isConnected() ? 1 : 0);
+  }
+  publishScan(now);
+}
+
+// v2.1: free memory at each start-up step (to see the RAM budget on the board).
+void bootHeap(const char *step) {
+  usb::linef("INFO BOOT memory %s: free=%u largest=%u", step, static_cast<unsigned>(ESP.getFreeHeap()),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+}
+
+// Independent heartbeat: shows a stalled loop (the watchdog then restarts it).
+void diagnosticWatch(void *) {
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(watchEveryMs));
+    usb::linef("DEBUG WATCH %lu %lu", static_cast<unsigned long>(loopCounter.load()),
+               static_cast<unsigned long>(loopStage.load()));
+  }
+}
+
+// =================================================================================
+// setup() and loop()
+// =================================================================================
+void setup() {
+  Serial.setRxBufferSize(8192);
+  Serial.setTxBufferSize(4096);
+  Serial.begin(460800);
+  usb::begin();
+  bootHeap("start");
+
+  strip.begin();
+  strip.setBrightness(ledBrightness);
+  strip.clear();
+  directLedShow();
 #ifdef LIDAR_RX_PIN
-  for (unsigned i = 0; i < 1024 && lidarUart.available(); ++i)
+  lidarUart.setRxBufferSize(8192);
+  lidarUart.begin(230400, SERIAL_8N1, LIDAR_RX_PIN, -1);
+#endif
+
+  replies = xQueueCreate(8, sizeof(Reply));
+  displayAcks = xQueueCreate(16, sizeof(AckEvent));
+  radioReady = replies && startRadio(cameraMac, receiveReply);
+  if (radioReady) {
+    esp_now_peer_info_t displayPeer = {};
+    memcpy(displayPeer.peer_addr, displayBroadcast, 6);
+    displayPeer.channel = channel;
+    displayPeer.ifidx = WIFI_IF_STA;
+    displayRadioReady = esp_now_add_peer(&displayPeer) == ESP_OK;
+  }
+  bootHeap("after Wi-Fi/ESP-NOW");
+  xTaskCreatePinnedToCore(diagnosticWatch, "diagWatch", 2560, nullptr, 1, nullptr, 1);
+  if (xTaskCreatePinnedToCore(capturePhotos, "capturePhotos", 6144, nullptr, 1, &photoTask, 1) != pdPASS)
+    photoTask = nullptr;
+  bootHeap("after tasks");
+  phone::begin();
+  bootHeap("after Bluetooth");
+  extendWarning(true);   // startup light test (3 flashes)
+  enableLoopWDT();       // rule 2: a loop stuck for 5 s restarts the module
+}
+
+void loop() {
+  ++loopCounter;
+  loopStage = 1;
+  serviceLed(millis());
+  loopStage = 2;
+  for (unsigned i = 0; i < usbBytesPerLoop && Serial.available(); ++i) receiveInput(static_cast<uint8_t>(Serial.read()));
+#ifdef LIDAR_RX_PIN
+  loopStage = 3;
+  for (unsigned i = 0; i < lidarBytesPerLoop && lidarUart.available(); ++i)
     processLidarByte(static_cast<uint8_t>(lidarUart.read()), millis());
 #endif
-  loopStage.store(3);
-  serviceLed();
-  loopStage.store(4);
-  reportStatus();
-  loopStage.store(5);
-  phone::service();  // v1.25
-  loopStage.store(0);
+  loopStage = 4;
+  const uint32_t now = millis();
+  serviceLed(now);
+  loopStage = 5;
+  publishStatus(now);
+  loopStage = 6;
+  phone::service();
+  loopStage = 0;
   delay(1);
 }
 
@@ -1658,7 +1852,7 @@ inline size_t copyOut(const Segment *segments, size_t count, size_t offset, uint
 // END PHONE WIRE
 
 // ==========================================================================
-// Phone link over Bluetooth LE (new in v1.25)
+// Phone link over Bluetooth LE (v1.25; v2.0 reliability changes marked "v2.0:")
 //
 // The phone (Bike Nav app) connects to "BikeNav Main". It writes handlebar
 // screens (0x10), which go straight to the Front Module over ESP-NOW, a hello
@@ -1667,7 +1861,7 @@ inline size_t copyOut(const Segment *segments, size_t count, size_t offset, uint
 // LiDAR has recorded 1.5 s more, a close-pass package (0xB1/0xB2/0xB3).
 //
 // Tasks: NimBLE callbacks run on the Bluetooth task and only forward screens
-// and set flags; the photos come from the sendPhotos task through a queue;
+// and set flags; the photos come from the USB writer task through a queue;
 // everything else runs from loop() via phone::service().
 // ==========================================================================
 namespace phone {
@@ -1678,13 +1872,14 @@ const char *const serviceUuid = "6e3b2000-8f7a-4c1e-9b52-2d1c0b7a1f10";
 const char *const phoneToMainUuid = "6e3b2001-8f7a-4c1e-9b52-2d1c0b7a1f10";  // write
 const char *const mainToPhoneUuid = "6e3b2002-8f7a-4c1e-9b52-2d1c0b7a1f10";  // notify
 const uint8_t frontMac[] = {0x8c, 0x94, 0xdf, 0x6c, 0xbc, 0x80};  // Front Module (change if replaced)
-constexpr uint8_t firmwareMajor = 1;
-constexpr uint8_t firmwareMinor = 28;  // v1.28: was 25
+constexpr uint8_t firmwareMajor = 2;
+constexpr uint8_t firmwareMinor = 2;   // v2.1
 constexpr uint32_t clipBeforeMs = 2000;     // LiDAR clip: this long before the close pass...
 constexpr uint32_t clipAfterMs = 1500;      // ...to this long after
-constexpr size_t clipSlots = 40;            // recent scans kept (4 s at 10 scans/s)
-constexpr size_t clipMaxPoints = 200;       // points kept per scan (the phone allows 1024)
+constexpr size_t clipSlots = 36;            // recent scans kept (3.6 s at 10 scans/s; v2.1: was 40)
+constexpr size_t clipMaxPoints = 100;       // points kept per scan (v2.1: was 200; the phone allows 1024)
 constexpr uint32_t photoWaitMs = 20000;     // send the package anyway after this long
+constexpr size_t clipHeapReserve = 12 * 1024;  // v2.2: the clip never takes the last 12 KB
 constexpr uint32_t ackTimeoutMs = 5000;     // phone must confirm a package within this
 constexpr unsigned maxResends = 2;          // then the package is dropped
 constexpr uint32_t statusEveryMs = 10000;
@@ -1693,8 +1888,13 @@ constexpr uint32_t frontFreshMs = 15000;    // "Front OK" = last screen delivere
 constexpr uint32_t approachMemoryMs = 5000; // approach speed reported with a close pass
 constexpr size_t maxNotify = 512;           // largest notification we build
 constexpr unsigned partsPerLoop = 16;       // notifications per loop() pass
+// v1.29: connection parameters asked of the phone (units: 1.25 ms, 10 ms).
+constexpr uint16_t connIntervalMin = 24;    // 30 ms
+constexpr uint16_t connIntervalMax = 40;    // 50 ms
+constexpr uint16_t supervisionTimeout = 600;  // 6 s without a packet = link lost
+constexpr uint32_t advertisingCheckMs = 3000;  // v2.0: restart advertising if it stopped this long
 
-// ---- shared with the Bluetooth task and the sendPhotos task ----
+// ---- shared with the Bluetooth task and the USB writer task ----
 NimBLECharacteristic *toPhone;
 bool bluetoothReady;
 std::atomic<bool> connected{false};
@@ -1708,6 +1908,8 @@ std::atomic<int> frontResult{-1};     // last screen delivery: -1 none, 0 failed
 std::atomic<uint32_t> frontResultAt{0};
 std::atomic<int> cameraState{-1};     // last photo: -1 none yet, 0 failed, 1 OK
 std::atomic<bool> acceptingPhotos{false};
+std::atomic<int> disconnectReason{0};  // v1.29: NimBLE reason of the last disconnect
+std::atomic<uint32_t> connectedAt{0};  // v1.29: millis() at the last connect
 QueueHandle_t photoQueue;
 
 // ---- used only from loop() ----
@@ -1772,15 +1974,14 @@ uint32_t helloConnection;
 uint32_t lastStatusAt;
 bool wasConnected;
 
+uint32_t advertisingDownSince;  // v2.0: 0 = advertising (or connected)
+
+// v2.0: queued for the USB writer; never waits.
 void log(const char *format, ...) {
-  if (!serialOutput || xSemaphoreTake(serialOutput, pdMS_TO_TICKS(50)) != pdTRUE) return;
-  char line[160];
   va_list args;
   va_start(args, format);
-  vsnprintf(line, sizeof(line), format, args);
+  usb::vlinef(format, args);
   va_end(args);
-  Serial.println(line);
-  xSemaphoreGive(serialOutput);
 }
 
 bool notify(const uint8_t *data, size_t length) {
@@ -1792,11 +1993,15 @@ class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &info) override {
     mtu = info.getMTU();
     ++connection;
+    connectedAt = millis();  // v1.29
     connected = true;
-    // 7.5-15 ms interval, 4 s supervision timeout: faster package transfers.
-    server->updateConnParams(info.getConnHandle(), 6, 12, 0, 400);
+    // v1.29: 30-50 ms interval, 6 s supervision timeout (was 7.5-15 ms / 4 s).
+    // Bluetooth and ESP-NOW share one radio; a short interval left too little
+    // time for ESP-NOW and made the link drop.
+    server->updateConnParams(info.getConnHandle(), connIntervalMin, connIntervalMax, 0, supervisionTimeout);
   }
-  void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int) override {
+  void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int reason) override {
+    disconnectReason = reason;  // v1.29: logged from service()
     connected = false;  // advertising restarts by itself (advertiseOnDisconnect)
   }
   void onMTUChange(uint16_t value, NimBLEConnInfo &) override { mtu = value; }
@@ -1844,7 +2049,10 @@ void espNowSent(const uint8_t *mac, esp_now_send_status_t result) {
 }
 
 // ---- called from the firmware above ----
+const char *resetText(esp_reset_reason_t r);  // v1.29: defined below
+
 void begin() {
+  log("INFO BOOT reason: %s", resetText(esp_reset_reason()));  // v1.29
   photoQueue = xQueueCreate(burstShots + 1, sizeof(Photo));
   if (radioReady) {
     esp_now_peer_info_t peer = {};
@@ -1854,7 +2062,11 @@ void begin() {
     esp_now_add_peer(&peer);
     esp_now_register_send_cb(espNowSent);
   }
-  if (!NimBLEDevice::init(deviceName)) return;
+  if (!NimBLEDevice::init(deviceName)) {
+    log("ERR Bluetooth failed to start (free memory %u, largest block %u)", static_cast<unsigned>(ESP.getFreeHeap()),
+        static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));  // v2.0/v2.1
+    return;
+  }
   NimBLEDevice::setMTU(517);
   NimBLEServer *server = NimBLEDevice::createServer();
   server->setCallbacks(&serverCallbacks);
@@ -1872,13 +2084,46 @@ void begin() {
   advertising->setScanResponseData(response);
   advertising->enableScanResponse(true);
   bluetoothReady = advertising->start();
+  if (!bluetoothReady) log("ERR Bluetooth advertising failed to start");  // v2.0
 }
 
 bool bluetoothStarted() { return bluetoothReady; }
 
+bool isConnected() { return connected.load(); }  // v1.29
+
+// v1.29: plain-English names for the usual NimBLE disconnect reasons
+// (0x200 + the Bluetooth HCI error code).
+const char *disconnectText(int reason) {
+  switch (reason) {
+    case 0x208: return "link timed out (radio lost the phone)";
+    case 0x213: return "phone closed the connection";
+    case 0x216: return "module closed the connection";
+    case 0x222: return "phone stopped answering (LL timeout)";
+    case 0x23b: return "phone refused the connection settings";
+    case 0x23e: return "connection failed to start";
+    default: return "other";
+  }
+}
+
+// v1.29: why the board last started, logged once at power-up.
+const char *resetText(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power on";
+    case ESP_RST_EXT: return "reset pin";
+    case ESP_RST_SW: return "software restart";
+    case ESP_RST_PANIC: return "CRASH (panic)";
+    case ESP_RST_INT_WDT: return "CRASH (interrupt watchdog)";
+    case ESP_RST_TASK_WDT: return "CRASH (task watchdog)";
+    case ESP_RST_WDT: return "CRASH (watchdog)";
+    case ESP_RST_BROWNOUT: return "BROWN-OUT (supply voltage dropped)";
+    case ESP_RST_DEEPSLEEP: return "wake from deep sleep";
+    default: return "unknown";
+  }
+}
+
 void cameraResult(bool ok) { cameraState = ok ? 1 : 0; }
 
-// sendPhotos task: hand a burst photo to the package being collected.
+// USB writer task: hand a burst photo to the package being collected.
 // Returns true if the phone link took it (and will free the bytes).
 bool keepPhoto(const Photo &photo) {
   return acceptingPhotos.load() && photoQueue && xQueueSend(photoQueue, &photo, 0) == pdTRUE;
@@ -1933,6 +2178,17 @@ void onClosePass(uint32_t now, bool burstStarted, bool simulated) {
     log("INFO Close pass %u: alert only, close pass %u is still being collected", eventId, collecting.eventId);
     return;
   }
+  // v2.2: an older package the phone can't take is dropped now, so its
+  // memory is free for this close pass's photos and clip.
+  if (outgoing.active && !(connected.load() && helloSeen)) {
+    log("INFO Close pass %u was never delivered; keeping close pass %u instead", outgoing.eventId, eventId);
+    outgoing.release();
+    send = Send::idle;
+  }
+  // v2.2: hold back room for the clip (about as large as the ring's scans).
+  size_t clipEstimate = 4;
+  for (size_t j = 0; j < ringUsed; ++j) clipEstimate += 9 + ring[j].count * 5;
+  clipHeapPending = static_cast<uint32_t>(clipEstimate);
   collecting = Package();
   collecting.active = true;
   collecting.eventId = eventId;
@@ -1960,7 +2216,15 @@ void buildClip(Package &p) {
     }
   }
   p.clipDone = true;
+  clipHeapPending = 0;  // v2.2
   if (!scans) return;  // no LiDAR: the package carries an empty clip
+  // v2.2: the radios keep their memory (rule 3).
+  if (heap_caps_get_free_size(MALLOC_CAP_8BIT) < bytes + clipHeapReserve ||
+      heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < bytes + 512) {
+    log("ERR Close pass %u: not enough memory for the LiDAR clip (%u bytes, free=%u)", p.eventId,
+        unsigned(bytes), unsigned(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
+    return;
+  }
   p.clip = static_cast<uint8_t *>(malloc(bytes));
   if (!p.clip) {
     log("ERR Close pass %u: no memory for the LiDAR clip (%u bytes)", p.eventId, unsigned(bytes));
@@ -2020,10 +2284,11 @@ void collect(uint32_t now) {
   }
   if (!collecting.photosDone || !collecting.clipDone) return;
 
-  // Finished. Only one package is kept: if the phone isn't connected, the
-  // newest close pass replaces an older one that was never delivered.
+  // Finished. Only one package is kept: if the phone can't take it (not
+  // connected, or connected without its hello), the newest close pass
+  // replaces an older one that was never delivered.
   if (outgoing.active) {
-    if (connected.load()) return;  // still sending the older one; try again later
+    if (connected.load() && helloSeen) return;  // still sending the older one (v2.0: needs hello)
     log("INFO Close pass %u was never delivered; keeping close pass %u instead", outgoing.eventId,
         collecting.eventId);
     outgoing.release();
@@ -2120,7 +2385,13 @@ void service() {
   const bool isConnected = connected.load();
   if (isConnected != wasConnected) {
     wasConnected = isConnected;
-    log(isConnected ? "INFO Phone connected" : "INFO Phone disconnected");
+    // v1.29: say why the phone disconnected, and after how long.
+    if (isConnected) log("INFO Phone connected");
+    else {
+      const int reason = disconnectReason.load();
+      log("INFO Phone disconnected after %lu s: %s (0x%03x)",
+          static_cast<unsigned long>((now - connectedAt.load()) / 1000), disconnectText(reason), reason);
+    }
   }
   if (helloConnection != connection.load()) {
     helloConnection = connection.load();
@@ -2133,6 +2404,18 @@ void service() {
   }
   if (alertWaiting) alertWaiting = isConnected && !notify(pendingAlert, sizeof(pendingAlert));
   if (isConnected && helloSeen && now - lastStatusAt >= statusEveryMs) sendStatus(now);
+  // v2.0: if advertising has stopped while no phone is connected, the phone
+  // could never find the module again: restart it.
+  if (bluetoothReady && !isConnected && !NimBLEDevice::getAdvertising()->isAdvertising()) {
+    if (!advertisingDownSince) advertisingDownSince = now | 1;
+    else if (now - advertisingDownSince >= advertisingCheckMs) {
+      advertisingDownSince = 0;
+      log(NimBLEDevice::getAdvertising()->start() ? "INFO Bluetooth advertising restarted"
+                                                  : "ERR Bluetooth advertising could not restart");
+    }
+  } else {
+    advertisingDownSince = 0;
+  }
   collect(now);
   transfer(now);
 }

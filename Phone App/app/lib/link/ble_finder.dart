@@ -139,6 +139,23 @@ class _BleTransport implements LinkTransport {
   @override
   bool get isDemo => false;
 
+  /// Android's reason for the last disconnect, in plain words.
+  @override
+  String? get dropReason {
+    final r = device.disconnectReason;
+    if (r == null) return null;
+    final text = switch (r.code) {
+      8 => 'link timed out (radio lost the module)',
+      19 => 'the module closed the connection',
+      22 => 'the phone closed the connection',
+      34 => 'the module stopped answering',
+      62 => 'the connection failed to start',
+      133 => 'Bluetooth error 133 (Android)',
+      _ => r.description ?? 'unknown',
+    };
+    return '$text (code ${r.code})';
+  }
+
   @override
   Future<void> write(List<int> data) =>
       toMain.write(data, withoutResponse: toMain.properties.writeWithoutResponse);

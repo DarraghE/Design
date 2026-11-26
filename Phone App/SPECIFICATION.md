@@ -5,7 +5,7 @@
 | **Module** | Phone App ("Bike Nav") |
 | **Runs on** | Android phone (built and laid out for a Google Pixel 9a; needs Android 7.0 / API 24 or newer, 64-bit, with Bluetooth LE) |
 | **Language** | Dart / Flutter 3.50.1 |
-| **Install file** | [`release/BikeNav.apk`](release/BikeNav.apk), version 1.0.1, 18.9 MB, SHA-256 `c933185687cabd22272be50f7afaeb7fe372a73530194e924a5a88cbc8de3309` (see section 6) |
+| **Install file** | [`release/BikeNav.apk`](release/BikeNav.apk), version 1.0.2, 18.9 MB, SHA-256 `1f94a9fef8a45f77789eb24d87bd57e633e7dfb5bc31584b6829ce9903f7f691` (see section 6) |
 | **Status** | **App complete and tested in software (87 automated tests pass).** It works end to end with the built-in demo Main Module. **Not yet tested with real hardware:** the Main Module's Bluetooth side is written (firmware v1.14, section 8) but not yet run on the board; the Front Module's frame display isn't built yet (section 9). Plate reading needs your OpenAI key; uploading needs the website address. |
 
 ## 1. What the app does
@@ -31,7 +31,7 @@ The app has two modes and talks to one thing on the bike, the **Main Module**, o
 
 | Screen | What's on it |
 |--------|--------------|
-| **Home** | Main Module connection card (tap to connect); live **handlebar screen preview**, pixel for pixel what is sent; Navigation card (status, next instruction, Open/End); Close Pass card (Armed/Waiting, last incident, Recordings; with the demo module also **Simulate pass**). A red banner and a vibration appear when a close pass is detected. |
+| **Home** | Main Module connection card (tap to connect; since 1.0.2 its sheet also shows how often the link has dropped and Android's reason for the last drop, e.g. "link timed out (code 8)"); live **handlebar screen preview**, pixel for pixel what is sent; Navigation card (status, next instruction, Open/End); Close Pass card (Armed/Waiting, last incident, Recordings; with the demo module also **Simulate pass**). A red banner and a vibration appear when a close pass is detected. |
 | **Connect** (bottom sheet) | Scans for "BikeNav Main", tap once to connect. The module is remembered and reconnected automatically after that. Disconnect / Forget. "No hardware? Use the demo module". |
 | **Navigation** | Planning: dark map, "Where to?" search (Ireland), or long-press the map; route card with distance, time and turns; **Start navigation**; "Simulate the ride (demo)". Riding: big handlebar preview, the next instruction ("then …" for a second close turn), whether frames are being sent, the map following the rider, End/Done. |
 | **Recordings** | Every close pass, newest first: best photo, plate, distance and speed, time, upload state. |

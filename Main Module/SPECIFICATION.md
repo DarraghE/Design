@@ -4,9 +4,9 @@
 |---|---|
 | **Module** | Main Module: the hub at the back of the bike. It handles LiDAR detection, the warning lights and the camera trigger, and is the phone's main link (called the "relay" / "rear" in older notes) |
 | **Runs on** | FireBeetle ESP32, mounted at the back of the bike |
-| **Code file** | `main_module.ino` (Arduino sketch, firmware **v1.28**) |
-| **Status** | **v1.28 written, not yet flashed; the board runs v1.26.** v1.28 = v1.26 + clear error replies from the USB image debugger (section 2.1); nothing else changed, so reflashing is only needed for that. v1.26 is installed (25 Nov 2026, from the team's `BikeNav_Installed_Firmware_2026-11-25` archive): the board answered with the v1.26 handshake over USB. A USB image transfer then timed out at byte zero (section 6, item 2). **The Bluetooth link to the phone hasn't been tried yet.** Compiles (ESP32 core 3.3.8, NimBLE-Arduino 2.5.2); its Bluetooth bytes are checked against the phone app's decoder on a computer (`Tools/Phone Link Test/`). |
-| **Source** | `Rear_v1.21_reconstructed/Relay/` from the team's `BikeNav_PreBluetooth_Source` bundle (25 Nov 2026): `Relay.ino` and `TestImage.h`, plus `Detection.h`, `ScanInput.h`, `Stl19p.h` and `Radio.h`, which are byte-identical to v1.13's (`Archive/Firmware_Backup_v2_2026-11-25/LiDAR_v1.13_Complete_Setup/ESP32_Relay/Relay/`). Merged into one file; every v1.25 change is marked `v1.25:`; the phone link is new code in the last two sections. **v1.26** (Oscar, 25 Nov 2026) = v1.25 + a USB image debugger (`readImageByte`, section 2.1) and `#define LIDAR_RX_PIN 16` as the first line. v1.28 changes to it are marked `v1.28:` (v1.27 is the number of Oscar's Chrome page, so it was skipped). The version numbers 1.22–1.24 were used for phone experiments on Oscar's Mac that aren't in this repo; v1.25 is unrelated to them. |
+| **Code file** | `main_module.ino` (Arduino sketch, firmware **v2.2**) |
+| **Status** | **v2.2 is installed on the board (26 Nov 2026) and runs: Bluetooth starts, no crashes or restarts.** v2.0 is a reliability rewrite of v1.29 (section 1.7): the main loop never waits for USB, a watchdog restarts a hung module, photos can't use up the memory Wi-Fi and Bluetooth need, and Bluetooth advertising is restarted if it stops. **v2.1** fixed the real cause of the dropping phone link: v1.26 and v2.0 ran out of memory at start-up, so Bluetooth failed to start and the module crashed (`std::bad_alloc` in the LiDAR decoder) and restarted over and over. v2.1 uses about 25 KB less static RAM (clip ring 18 KB, USB frame buffer 5 KB, smaller queues and task stacks) and prints the free memory at each start-up step. **v2.2** shares the little memory left (about 37 KB with Wi-Fi and Bluetooth on) as radios first, then the LiDAR clip, then photos (section 1.7). Same behaviour and protocols as v1.29; the LiDAR decoder and detectors are byte-for-byte unchanged. Its Bluetooth bytes are checked against the phone app's decoder (`Tools/Phone Link Test/`). **Not yet tried with the phone or the camera on the bike.** |
+| **Source** | History: v1.13 (firmware backup, `Archive/Firmware_Backup_v2_2026-11-25/`) → v1.20/v1.21 (team's `BikeNav_PreBluetooth_Source` bundle; v1.21 is a reconstruction) → v1.25 (phone link) → v1.26 (Oscar: USB image debugger; installed) → v1.28/v1.29 (fixes) → v2.0 (rewrite) → v2.1 (memory) → **v2.2** (memory sharing; installed). The LiDAR decoder, both detectors, the ESP-NOW packet structs and the test JPEG are the v1.13/v1.21 code, unchanged; the application around them was rewritten in v2.0; the phone link is the v1.25–v1.29 code with v2.0 changes marked `v2.0:`. Version numbers 1.22–1.24 and 1.27 belong to Oscar's experiments and Chrome page, not to this file. |
 
 ## 1. What this module does
 
@@ -79,15 +79,14 @@ These are hand-tuned rules, not machine learning. **They haven't been validated 
 - With automatic actions on, every scan with a renewed approach warning **or** an active close state starts/extends a **2 s** warning. While it lasts, all 30 LEDs go red (255, 0, 0) at brightness **80/255** and off again, **500 ms on, 500 ms off**.
 - `C` (and power-up) runs **3 on/off cycles** without blocking the loop, then reports `OK LED PULSE GPIO2`.
 - The strip is driven by `directLedShow()`: the pixel bytes are bit-banged on GPIO2 with the CPU cycle counter (1.25 µs per bit), interrupts on that core held off for about 1 ms per frame. This replaced the NeoPixel library's `show()` in v1.21. The NeoPixel library is still used to hold and scale the pixel colours.
-- `manualLedTest()` (blocking, with `DEBUG`-style lines) is still in the file but is no longer called.
 
 ### 1.5 Photos (`captureBurst`, `capture`, `forwardDisplay`)
 
 - A close pass (automatic actions on) starts one **burst of 5 photos** (10 before v1.25). The first request is due 0.5 s after the close pass, then every 0.5 s. Slow transfers delay later shots.
 - A close pass during a running burst doesn't start another burst. It's counted and reported as `INFO … during an active photo burst`.
 - `P` takes one test photo, after any running burst. `T` sends the built-in test JPEG (`debugJpeg`, `TestImage.h`) to the Front Module.
-- Each photo is fetched from the Camera Module over ESP-NOW (section 2.2), then **broadcast to the Front Module** as 236-byte JPEG packets (`forwardDisplay`, about 4 ms apart, no delivery check), then sent to the computer as `JPEG …`. Since v1.25, burst photos are then kept in memory for the phone package (section 1.6); test photos are freed.
-- FreeRTOS tasks: `capturePhotos` and `sendPhotos` (8 KB stacks), `diagWatch` (prints `DEBUG WATCH` every 2 s). A serial lock stops text and photo bytes getting mixed up on USB.
+- Each photo is fetched from the Camera Module over ESP-NOW (section 2.2), stored only if one free block holds it and **16 KB plus the room the close pass's LiDAR clip still needs** stays free afterwards (else `Relay ran out of memory`; v2.2), **broadcast to the Front Module** as 236-byte JPEG packets if no phone is connected (`forwardDisplay`, about 4 ms apart, no delivery check), then queued for USB as `JPEG …` (`deliverPhoto`). After USB, burst photos are kept for the phone package (section 1.6); test photos are freed.
+- Tasks: `capturePhotos` (8 KB stack, core 1), `usbWriter` (section 1.7), `diagWatch` (prints `DEBUG WATCH` every 2 s).
 
 ### 1.6 Phone link (new in v1.25, `namespace phone`)
 
@@ -96,6 +95,8 @@ The phone is the Bluetooth central; the Main Module is the peripheral. The byte 
 | What | How the firmware does it |
 |------|---------------------------|
 | Advertising | Name **`BikeNav Main`** (in the scan response), service UUID in the advertisement. Restarts by itself when the phone disconnects. No PIN, no bonding. One phone at a time |
+| Sharing the radio (v1.29) | The ESP32 has **one radio** for Bluetooth and Wi-Fi/ESP-NOW (camera, Front Module). On connecting, the module asks the phone for a **30–50 ms** connection interval and a **6 s** supervision timeout (`connIntervalMin/Max`, `supervisionTimeout`). v1.25–v1.28 asked for 7.5–15 ms / 4 s, which kept Bluetooth on the radio most of the time, collided with ESP-NOW and made the link drop. While the phone is connected, camera photos are **not** broadcast to the Front Module (it shows the phone's screens then and ignores them), which frees the radio during a close-pass burst |
+| Diagnostics (v1.29) | USB prints `INFO BOOT reason: …` at power-up (a crash, watchdog or **brown-out** shows here) and `INFO Phone disconnected after N s: <reason> (0x…)`: 0x208 link timed out (radio), 0x213 phone closed it, 0x222 phone stopped answering, 0x23b phone refused the settings, 0x23e failed to start |
 | Screens | Every phone write starting with `0x10` is sent **unchanged** to the Front Module (`phone::frontMac`, unicast) by ESP-NOW, straight from the Bluetooth callback. Nothing is decoded or stored |
 | Hello / status | `0x40` from the phone → `0xC1` status. Then a status every **10 s** while connected (table in section 2.3) |
 | Close-pass alert | At `newClose`, `0xA1` is sent at once (if connected), **even with automatic actions off**: event number (+1 per close pass since power-on), the closest close-pass point in mm, and the approach speed if a vehicle was being tracked in the last **5 s** (else `0xFFFF`) |
@@ -106,6 +107,17 @@ The phone is the Bluetooth central; the Main Module is the peripheral. The byte 
 | Phone not connected | Only after the phone has connected and sent hello is a package sent. A package that can't be delivered waits; a newer close pass replaces it (only one is kept). A close pass while another is still being collected gets an alert only |
 | Simulated close pass | USB command `X`: alert + photo burst + package with no distance (`0xFFFF`), for bench tests without LiDAR |
 
+### 1.7 Reliability design (v2.0)
+
+| Rule | How |
+|------|-----|
+| **The loop never waits** | One task, `usb::writer`, owns USB output. The loop and other tasks only queue lines (`usb::line`, 48 deep) and never wait; a full queue drops the newest diagnostic and later reports `INFO USB OUTPUT DROPPED <n>`. LIVE frames and SCAN lines use one shared buffer: if the writer is still sending the previous one, the newest result waits (newest wins). The writer sends in slices that fit the 4 KB UART buffer, so reading USB input is never held up. Before v2.0, a LIVE frame stalled the loop for about 100 ms every 200 ms, and a photo on USB for up to 0.4 s |
+| **A hang restarts the module** | The loop is on the ESP32 task watchdog (`enableLoopWDT`, 5 s). After any restart, the first line is `INFO BOOT reason: …` (power on, crash, watchdog, **brown-out**) |
+| **Memory for the radios** | Measured on the board (v2.2): about 82 KB free after Wi-Fi/ESP-NOW start, 51 KB after Bluetooth, about 37 KB while running (29 KB while a package waits for the phone), largest block 12–13 KB. Order of priority: radios, then the LiDAR clip, then photos. A photo is stored only if one block holds it and `photoHeapReserve` (16 KB) plus the clip estimate (`clipHeapPending`, set when a close pass starts) stays free; the clip copy only if `clipHeapReserve` (12 KB) stays free. A package the phone can't take is dropped as soon as a new close pass starts. In practice a package carries the clip and 1–2 of the 5 photos. Wi-Fi and Bluetooth fail, and the phone link drops, when memory runs out. `DEBUG HEAP` (every 10 s) shows free, minimum-ever and largest-block memory; `INFO BOOT memory <step>: free=… largest=…` at start-up |
+| **Radio sharing** | 30–50 ms Bluetooth connection interval (section 1.6), no photo broadcast while the phone is connected, and Bluetooth advertising restarted if it has stopped for 3 s while no phone is connected (`INFO Bluetooth advertising restarted`) |
+| **Bounded everything** | Fixed queues and buffers; the LiDAR (2,048 bytes) and USB input (1,024 bytes) per loop pass are capped so one source can't starve the others |
+| **Packages can't get stuck** | A finished close pass replaces an undelivered older one if the phone isn't connected *or* hasn't said hello (before v2.0, a connected phone that never said hello blocked it forever) |
+
 ## 2. Interfaces
 
 ### 2.1 USB serial to the computer (460800 baud)
@@ -114,7 +126,7 @@ The phone is the Bluetooth central; the Main Module is the peripheral. The byte 
 
 | Input | Meaning |
 |-------|---------|
-| `V` | Report versions: `READY 1.20 RADIO OK`/`ERROR`, `INFO DISPLAY RELAY READY`/`ERROR`, `INFO PHONE LINK 1.28 BLUETOOTH READY`/`ERROR`, `USB IMAGE READY 1.26` (unchanged in v1.28: Oscar's tools check it). The first line still says 1.20 (as v1.21 did) so existing viewers recognise the board |
+| `V` | Report versions: `READY 1.20 RADIO OK`/`ERROR`, `INFO DISPLAY RELAY READY`/`ERROR`, `INFO PHONE LINK 2.2 BLUETOOTH READY`/`ERROR`, `USB IMAGE READY 1.26` (unchanged in v1.28: Oscar's tools check it). The first line still says 1.20 (as v1.21 did) so existing viewers recognise the board |
 | `C` | Test lights (3 flashes) |
 | `A` / `M` | Automatic actions (lights + photos) on / off. On at power-up since v1.25 |
 | `P` | Test camera (one photo; also shown on the Front Module) |
@@ -146,11 +158,15 @@ A half-received frame is dropped if no byte arrives for 250 ms.
 | `LIVE <ms> <close> <incoming> <km/h> <count>` + count × 5 bytes | Result for a live scan, **at most every 200 ms**. Per point: int16 x mm, int16 y mm, uint8 class (0 normal, 1 close, 2 approach) |
 | `JPEG <size> <burst> <shot>` + size bytes | A photo. Burst 0 = test photo |
 | `DEBUG HEALTH <lidarBytes> <scans> <freeHeap> <burstActive> <radio> <displayRadio>` | Every second |
-| `DEBUG WATCH <loopCount> <loopStage>` | Every 2 s from a separate task: shows a stalled loop |
+| `DEBUG WATCH <loopCount> <loopStage>` | Every 2 s from a separate task: shows a stalled loop (the watchdog restarts it after 5 s) |
+| `DEBUG HEAP free=… min=… largest=… uptime=… phone=0/1` | Every 10 s (v2.0): memory now, lowest ever, largest block; seconds since start; phone connected |
+| `INFO USB OUTPUT DROPPED <n>` | v2.0: <n> diagnostic lines were dropped because the USB queue was full |
+| `INFO BOOT reason: …` | First line after power-up or any restart |
+| `INFO Bluetooth advertising restarted` / `ERR Bluetooth …` | v2.0: advertising had stopped and was restarted / Bluetooth failed to start |
 | `DEBUG CAMERA_…`, `DEBUG DISPLAY_BEGIN/END …`, `DEBUG DISPLAY_ACK …` | Photo and Front Module transfer progress |
 | `USB IMAGE READY 1.26` | After `V`: the USB image debugger is present |
 | `USBFRAME <token> <offset> <result>` | One `@` image line was forwarded to the Front Module (`result` 0 = queued by ESP-NOW) |
-| `ERR …` / `INFO …` | Problems and notes (e.g. `ERR Burst 3 photo 4/5: Camera did not answer ESP-NOW`, `INFO AUTOMATIC ACTIONS ON`). Phone link: `INFO Phone connected` / `disconnected`, `INFO Close pass N ready for the phone: P photos, B bytes`, `INFO Close pass N delivered to the phone`, `INFO … sending again`, `ERR Close pass N dropped: …` |
+| `ERR …` / `INFO …` | Problems and notes (e.g. `ERR Burst 3 photo 4/5: Camera did not answer ESP-NOW`, `INFO AUTOMATIC ACTIONS ON`). Phone link: `INFO Phone connected`, `INFO Phone disconnected after N s: <reason> (0x…)` (v1.29), `INFO BOOT reason: …` (v1.29, at power-up), `DEBUG DISPLAY_SKIPPED_PHONE_CONNECTED` (v1.29), `INFO Close pass N ready for the phone: P photos, B bytes`, `INFO Close pass N delivered to the phone`, `INFO … sending again`, `ERR Close pass N dropped: …` |
 
 `Tools/LiDAR Viewer/` in this repo is the **v1.13 viewer**. It recognises `READY 1.20 RADIO`, ignores `DEBUG` lines and can't send `A`, `M` or `T`. The newer viewer Oscar used with v1.20/v1.21 isn't in the repo (section 6).
 
@@ -187,7 +203,7 @@ Implemented in v1.25 (`namespace phone`; byte builders in `namespace wire`). All
 | Phone → Main | `6e3b2001-8f7a-4c1e-9b52-2d1c0b7a1f10` | Write, Write Without Response |
 | Main → Phone | `6e3b2002-8f7a-4c1e-9b52-2d1c0b7a1f10` | Notify |
 | Name | `BikeNav Main` | scan response |
-| MTU | up to 517 offered; the phone asks for 512 | requests a 7.5–15 ms connection interval |
+| MTU | up to 517 offered; the phone asks for 512 | requests a 30–50 ms connection interval, 6 s supervision timeout (v1.29) |
 
 | Message | Bytes | Firmware behaviour |
 |---------|-------|--------------------|
@@ -195,7 +211,7 @@ Implemented in v1.25 (`namespace phone`; byte builders in `namespace wire`). All
 | `0x40` hello (in) | `[0x40][version 1]` | Replies with `0xC1`; enables package sending on this connection |
 | `0x30` ack (in) | `[0x30][transferId u16][status]` | 0 = delivered (free it), 1 = send again |
 | `0xA1` alert (out) | `[0xA1][eventId u16][minDistanceMm u16][speedKmh×10 u16]` | Sent at once at a close pass |
-| `0xC1` status (out) | `[0xC1][flags][battery 255][1][25]` | flags: bit 0 **LiDAR OK** = a scan in the last 1 s; bit 1 **camera OK** = ESP-NOW started and the last photo request didn't fail (OK before the first photo); bit 2 **Front OK** = the last phone screen sent to the Front Module was delivered, within the last 15 s |
+| `0xC1` status (out) | `[0xC1][flags][battery 255][2][0]` | flags: bit 0 **LiDAR OK** = a scan in the last 1 s; bit 1 **camera OK** = ESP-NOW started and the last photo request didn't fail (OK before the first photo); bit 2 **Front OK** = the last phone screen sent to the Front Module was delivered, within the last 15 s |
 | `0xB1`/`0xB2`/`0xB3` (out) | start / parts / end + CRC-32 | One close-pass package (`CPK1`, section 1.6) |
 
 ## 3. Features
@@ -208,11 +224,15 @@ Implemented in v1.25 (`namespace phone`; byte builders in `namespace wire`). All
 | Approach detection + speed | Written, thresholds not validated | `Detector::detectApproach` |
 | Warning lights on approach **and close pass** (automatic actions) | Written (v1.21) | `processScan`, `extendWarning`, `serviceLed` |
 | Bit-banged WS2813 driver on GPIO2 | Written (v1.21 reconstruction) | `directLedShow` |
-| Startup light test (3 flashes) | Written (v1.21 reconstruction) | `loop` (`startupTest`) |
+| Startup light test (3 flashes) | Written (v1.21 reconstruction) | `setup` (`extendWarning(true)`) |
 | Automatic actions on/off (`A`/`M`), **on at power-up** | Written (v1.25 default) | `automaticActions` |
 | 5-photo burst on close pass via the Camera Module (10 before v1.25) | Written | `requestPhotoBurst`, `captureBurst`, `capture` |
 | Photos and test JPEG to the Front Module (broadcast) | Written (v1.20) | `forwardDisplay`, `debugJpeg` |
-| USB diagnostics (`DEBUG HEALTH/WATCH/CAMERA/DISPLAY`) | Written (v1.20) | `reportStatus`, `diagnosticWatch`, `debugLine` |
+| USB diagnostics (`DEBUG HEALTH/WATCH/HEAP/CAMERA/DISPLAY`) | Written (v1.20; HEAP v2.0) | `publishStatus`, `diagnosticWatch`, `debugLine` |
+| Non-blocking USB output (one writer task) | Written (v2.0) | `namespace usb` |
+| Loop watchdog (restart after 5 s stuck) | Written (v2.0) | `setup` (`enableLoopWDT`) |
+| Memory sharing: radios, clip, photos (16 KB / 12 KB reserves) | Working on the board (v2.2) | `capture`, `phone::buildClip`, `phone::onClosePass` |
+| Bluetooth advertising watchdog | Written (v2.0) | `phone::service` |
 | Test commands V / C / A / M / P / T / R, and X (fake close pass, v1.25) | Written | `receiveInput` |
 | USB image debugger (`@` hex lines → Front Module) | Written (v1.26), installed; first transfer timed out. Error replies added in v1.28 | `readImageByte`, `imageNibble`, `imageLineError` |
 | Direct LiDAR wiring to the ESP32 (UART2) | Written, needs `LIDAR_RX_PIN=16` at build time (section 4.3) | `#ifdef LIDAR_RX_PIN` |
@@ -266,44 +286,48 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 |---|---|
 | Board setting | **ESP32 Dev Module** (`esp32:esp32:esp32`), upload speed **115200**, Partition Scheme **Huge APP (3MB No OTA/1MB SPIFFS)** (`PartitionScheme=huge_app`) |
 | LiDAR input | The file starts with `#define LIDAR_RX_PIN 16` (LiDAR wired to GPIO16). Delete that line to take LiDAR data from a computer over USB instead |
-| ESP32 core | **3.x**. v1.25 compile-checked with **3.3.8** (Oscar's Mac had 3.2.0). 2.x won't work (ESP-NOW callback API). The ESP-NOW send callback changed in 3.3; the code handles both |
+| ESP32 core | **3.x**. v2.2 compile-checked with **3.3.8** (Oscar's Mac had 3.2.0). 2.x won't work (ESP-NOW callback API). The ESP-NOW send callback changed in 3.3; the code handles both |
 | Libraries | **Adafruit NeoPixel** (1.15.5), **NimBLE-Arduino** (2.5.2, by h2zero) |
-| Size (v1.26) | 1,213,885 bytes of flash (38% of Huge APP; 93% of the default 1.3 MB), 111,992 bytes of static RAM (40 KB of it is the LiDAR clip ring) |
+| Size (v2.2) | 1,216,873 bytes of flash (38% of Huge APP; 92% of the default 1.3 MB), 89,928 bytes of static RAM (18 KB LiDAR clip ring, 6 KB USB scan input, 5 KB USB frame buffer) |
+| Uploading | The board (FireBeetle 2 ESP32-E) has **no BOOT button**: the button marked **27** is a user button on GPIO27, not BOOT. Upload mode depends on the USB chip's auto-download circuit, which on this board no longer pulls GPIO0 low (tested 26 Nov 2026: RTS resets the chip, but no DTR/RTS sequence gives download mode). **Fix: put a jumper from pin 0 (IO0) to GND, upload (the reset is automatic), then remove the jumper and reset.** The soldered LiDAR and LED strip can stay connected |
 
 - **Arduino IDE:** open `main_module.ino` (click OK when it offers to make a `main_module` folder), set the board, partition scheme and port, then Upload.
 - **Mac script:** `bash Tools/flash_module.command main PORT` (sets the partition scheme and installs both libraries).
-- **Check it works:** serial monitor at 460800. At power-up the strip flashes 3 times. Send `V` → `READY 1.20 RADIO OK`, `INFO DISPLAY RELAY READY`, `INFO PHONE LINK 1.25 BLUETOOTH READY`, `USB IMAGE READY 1.26`. `DEBUG HEALTH` lines should show `lidarBytes` and `scans` rising with the LiDAR connected. `P` → a photo arrives (Camera Module powered).
+- **Check it works:** serial monitor at 460800. At power-up the strip flashes 3 times. Send `V` → `READY 1.20 RADIO OK`, `INFO DISPLAY RELAY READY`, `INFO PHONE LINK 2.2 BLUETOOTH READY`, `USB IMAGE READY 1.26`. `DEBUG HEALTH` lines should show `lidarBytes` and `scans` rising with the LiDAR connected. `P` → a photo arrives (Camera Module powered).
 - **Check the phone link:** section 8.
 - If a Mac build fails with `Failed to extract libcrypto.1.1.dylib`, nothing was uploaded. Check free disk space with `df -h "$HOME" "${TMPDIR:-/tmp}"`.
 
 ## 6. Known gaps and next steps
 
-1. **v1.21 is a reconstruction.** The team's bundle says `Rear_v1.21_reconstructed` was rebuilt from the documented v1.21 changes (GPIO2 driver, non-blocking light test, startup test) on the recovered v1.20 sketch. The original Mac source and its final upload were never verified, and the v1.20 sketch itself was recovered from a terminal listing with v1.19 headers. If Oscar's original v1.21 turns up, compare it with the `From Relay.ino` section and port the `v1.25:` changes (section 8.2).
+1. **v1.21 is a reconstruction.** The team's bundle says `Rear_v1.21_reconstructed` was rebuilt from the documented v1.21 changes (GPIO2 driver, non-blocking light test, startup test) on the recovered v1.20 sketch. The original Mac source and its final upload were never verified, and the v1.20 sketch itself was recovered from a terminal listing with v1.19 headers. If Oscar's original v1.21 turns up, compare its behaviour with the Application section (section 8.2).
 2. **USB image transfer timed out at byte zero** (Oscar's test on v1.26, 25 Nov 2026). In v1.26 an uppercase hex digit, a `\r`, a wrong length or an invalid packet (e.g. token 0, or big-endian numbers) dropped the line **without any reply**, which looks exactly like a timeout. v1.28 accepts `\r` and replies `ERR USB IMAGE <reason>` to everything else, so the next try will say what's wrong. The Chrome page (not in the repo) must send lowercase hex of the little-endian 236-byte packet and wait for `USBFRAME` after each line. Also, a command letter sent while an `@` line is open ends that line and is lost.
-3. **Phone link not run on hardware.** Compiles, and its bytes are checked against the app on a computer, but Bluetooth + ESP-NOW together, photo transfer speed with Bluetooth connected, memory with 5 photos held, and notification pacing are all untested on the board.
+3. **Phone link drops often (seen on v1.26).** Most likely cause: radio sharing between Bluetooth and ESP-NOW, made worse by the 7.5–15 ms interval v1.25–v1.28 asked for, the photo broadcasts, and (fixed in v2.0) a loop stalled by USB output. v1.29/v2.0 fix these; **not yet confirmed on the bike.** If it still drops, the new USB lines and the app (Main Module card: "Dropped N times… Last: …") say why: "link timed out" = radio (next step: `esp_coex_preference_set(ESP_COEX_PREFER_BT)`, or move the Main and phone closer); "BOOT reason: BROWN-OUT" = power supply (the LED strip and the ESP32 sharing a weak supply); "CRASH" = a firmware bug (send the USB log).
 4. **Bit-banged LED driver + Bluetooth (untested):** `directLedShow` holds off interrupts on its core for about 1 ms per strip update. Wi-Fi and Bluetooth run on the other core, so this should be fine, but check that the strip colours are stable and the phone link doesn't drop while the lights flash.
-5. **Camera photos to the Front Module:** every photo is still broadcast to the Front Module (v1.20 behaviour). Front v1.21 ignores them while the phone's screens are showing, so they no longer cover the directions; the broadcast still takes air time during a burst and reaches any ESP-NOW device on channel 6.
+5. **Camera photos to the Front Module:** broadcast (v1.20 behaviour) only while the phone is **not** connected since v1.29. The broadcast reaches any ESP-NOW device on channel 6.
 6. **Viewer out of date:** `Tools/LiDAR Viewer/` is the v1.13 viewer. It works with v1.25's USB lines but has no buttons for `A`/`M`/`T`, and expects bursts to be saved per photo. Add Oscar's newer viewer to `Tools/` if it is still needed.
 7. **Warning persistence:** the team earlier asked for warnings that last at least 1 s. The code renews a 2 s warning on fresh evidence, which is not the same rule. Confirm which is wanted.
 8. **Thresholds not validated:** test stationary and in controlled conditions first (suggested order: ports → version → lights → camera → LiDAR orientation → replay → live). Don't do unsafe road tests. **This must not be the only safety device on a bike.**
 9. **ESP-NOW and Bluetooth are unencrypted and unauthenticated.** Any phone running the app can connect. That's fine for a prototype, not for anything adversarial.
-10. **Memory:** about 216 KB of RAM is free at start-up before Wi-Fi and Bluetooth take their share. A package holds up to 5 JPEGs (QVGA, roughly 5-20 KB each) plus a clip of up to ~35 KB. Watch the free heap in the `DEBUG HEALTH` lines. If memory runs out, the clip is left out (`ERR … no memory for the LiDAR clip`) or the camera reports `Relay ran out of memory`.
-11. **3.3 V data into a 5 V strip:** GPIO2 drives the WS2813 data line directly. That often works but can flicker or fail; a 3.3 V → 5 V level shifter fixes it.
-12. **Front Module "NO PHONE":** the Main Module doesn't tell the Front Module when the phone disconnects; the Front Module must time out by itself (`Phone App/SPECIFICATION.md` section 9).
-13. Oscar's v1.27 Chrome page (the USB image sender) and his newer LiDAR viewer aren't in the repo; add them to `Tools/` if they are kept.
-14. Power supply, enclosure, LED strip length and BI wiring, and the LiDAR connector pinout are all undocumented.
+10. **Memory:** with Wi-Fi and Bluetooth running only about 37 KB is free (largest block 12–13 KB; measured on v2.2). A package can hold up to 5 JPEGs (QVGA, roughly 5-10 KB each) plus a clip of up to 18 KB, but the memory rules (section 1.7) mean it usually carries the clip and 1–2 photos; the rest log `Relay ran out of memory`. The full fix is for the Camera Module (which has PSRAM) to keep the burst and let the Main Module fetch each photo while sending it to the phone. Watch `DEBUG HEAP`: `min` should stay above about 16000.
+11. **Watchdog restarts:** if the loop is ever stuck for 5 s the module restarts (`INFO BOOT reason: CRASH (task watchdog)`). A restart drops the phone link for a few seconds; the app reconnects by itself. Report any such restart with its USB log.
+12. **3.3 V data into a 5 V strip:** GPIO2 drives the WS2813 data line directly. That often works but can flicker or fail; a 3.3 V → 5 V level shifter fixes it.
+13. **Front Module "NO PHONE":** the Main Module doesn't tell the Front Module when the phone disconnects; the Front Module must time out by itself (`Phone App/SPECIFICATION.md` section 9).
+14. Oscar's v1.27 Chrome page (the USB image sender) and his newer LiDAR viewer aren't in the repo; add them to `Tools/` if they are kept.
+15. Power supply, enclosure, LED strip length and BI wiring, and the LiDAR connector pinout are all undocumented.
 
 ## 7. Notes for AI assistants
 
 - Detection logic is the `lidar::Detector` class. Every number in sections 1.2–1.4 comes from the code. If you change a number, update this file.
 - **Don't silently "fix" the known issues in section 6.** They are decisions for the team. Report them instead.
-- `READY 1.20 RADIO` is deliberately unchanged (viewers look for it). The other version lines are `INFO PHONE LINK 1.28` (firmware version, matches `phone::firmwareMajor/Minor` sent to the phone) and `USB IMAGE READY 1.26` (Oscar's USB tools check it). Change a version line only together with the tool that reads it.
-- The board runs v1.26; this file is v1.28. Keep the Status line saying which version is installed.
+- **Keep the reliability rules (section 1.7 and the header of `main_module.ino`):** never write to `Serial` outside `usb::writer` (use `usb::line`/`usb::linef`); never block or `delay()` for long in `loop()`; never `malloc` a large buffer without leaving `photoHeapReserve` free; keep queues bounded.
+- `READY 1.20 RADIO` is deliberately unchanged (viewers look for it). The other version lines are `INFO PHONE LINK 2.2` (firmware version, matches `phone::firmwareMajor/Minor` sent to the phone) and `USB IMAGE READY 1.26` (Oscar's USB tools check it). Change a version line only together with the tool that reads it.
+- The board runs v2.2, the same as this file. Keep the Status line saying which version is installed.
+- Don't shorten the connection interval again for speed: Bluetooth and ESP-NOW share one radio (section 1.6).
 - Bluetooth memory: on ESP32 core 3.3+, the core frees the Bluetooth memory at boot unless the `esp32-hal-bt-mem.h` flag is set. NimBLE-Arduino 2.5.2 sets it (through `esp32-hal-bt.h`); checked in the built firmware (`_setBtLibraryInUse`). If you change the Bluetooth library, check this again.
 - **The `wire` namespace between `// BEGIN PHONE WIRE` and `// END PHONE WIRE` must stay plain C++** (no Arduino calls): `Tools/Phone Link Test/run_test.py` compiles it on a computer. After changing it or the package logic, run that test and `flutter test test/firmware_vectors_test.dart` in `Phone App/app`, and commit the regenerated `firmware_notifications.txt`.
 - NimBLE callbacks run on the Bluetooth task: keep them short (forward screens, set atomics). Everything else happens in `phone::service()` from `loop()`.
 - Don't set `WiFi.setSleep(false)` again: with Bluetooth on, ESP-IDF aborts unless Wi-Fi modem sleep is enabled.
-- `forwardDisplay` has an explicit declaration after `Photo capture();`. Keep it: without it, the Arduino IDE generates a prototype above `struct Photo` and the one-file sketch doesn't compile.
+- Functions taking a `Photo` (`capture`, `forwardDisplay`, `deliverPhoto`) are declared right after `struct Photo`. Keep that: otherwise the Arduino IDE puts its own prototypes above `struct Photo` and the one-file sketch doesn't compile.
 - The ESP-NOW packets must match `Camera Module/camera_module.ino` (`Request` 8 bytes, `Reply` 236 bytes, channel 6) and the Front Module's receiver.
 - Keep live and replay going through the same detector.
 - The sketch must stay one file. The original multi-file versions: v1.13 in `Archive/Firmware_Backup_v2_2026-11-25/`; v1.20/v1.21 in the team's `BikeNav_PreBluetooth_Source` bundle (not in the repo).
@@ -313,17 +337,17 @@ Wireless (ESP-NOW), no wires. See `Camera Module/SPECIFICATION.md`.
 
 ### 8.1 Bench test (no LiDAR needed)
 
-1. v1.26 is already on the board (or flash it, section 5). Power the Camera Module.
-2. Serial monitor at 460800: the strip flashes 3 times; send `V` → `INFO PHONE LINK 1.28 BLUETOOTH READY` (`1.25` on v1.26).
-3. Phone: Bike Nav app → Main Module card → **BikeNav Main**. USB shows `INFO Phone connected`; the app shows firmware **1.28** (1.25 on v1.26) and ✓/✗ for LiDAR, camera and Front Module. The Front ✓ needs Front v1.21 (it reports delivery of the phone's screens).
+1. Flash v2.2 (section 5; jumper pin 0 to GND to upload). Power the Camera Module.
+2. Serial monitor at 460800: `INFO BOOT reason: power on`, the strip flashes 3 times; send `V` → `INFO PHONE LINK 2.2 BLUETOOTH READY`. `DEBUG HEAP` every 10 s.
+3. Phone: Bike Nav app → Main Module card → **BikeNav Main**. USB shows `INFO Phone connected`; the app shows firmware **2.0** and ✓/✗ for LiDAR, camera and Front Module. The Front ✓ needs Front v1.21 (it reports delivery of the phone's screens).
 4. Send `X`: the app shows the close-pass alert at once; after ~4-5 s USB shows `INFO Close pass N ready for the phone …` then `… delivered to the phone`, and the app's **Recordings** has the photos (and the LiDAR replay if scans are coming in).
 5. With the LiDAR on GPIO16, a real close pass should do the same with a distance, and the strip should flash.
 6. With Front v1.21 flashed: the handlebar shows the app's screen within 3 s of connecting; start a navigation (or **Simulate the ride**) and it follows each turn.
 
-### 8.2 Moving the phone link onto other relay source
+### 8.2 Moving to other relay source
 
-The phone link is self-contained. To put it on another version (e.g. Oscar's original v1.21):
+v2.0 is no longer a patch on the v1.21 file, so the old step-by-step port list no longer applies. If Oscar's original v1.21 turns up, compare its LED, command and photo behaviour with the Application section and change v2.0 to match. Keep the reliability rules (section 1.7).
 
-1. Copy the last two sections of `main_module.ino` (`namespace wire` and `namespace phone`) to the end of the other sketch, plus `#include <cstdarg>`, `#include <NimBLEDevice.h>` and `#include <esp_idf_version.h>`.
-2. Apply every change marked `v1.25:` (search for it): the `phone::` declarations after `Photo capture();`, `takenAt` in `Photo` and in `captureBurst`/`capturePhotos`, `burstShots = 5`, `automaticActions = true`, `phone::cameraResult` and `phone::keepPhoto` in `sendPhotos` (instead of `free`), `requestPhotoBurst` returning `bool`, `phone::onScan`/`phone::onClosePass` in `processScan`, the `X` command, the `INFO PHONE LINK` line, `phone::begin()` at the end of `setup()`, `phone::service()` in `loop()`, and `WiFi.setSleep(true)` in `startRadio`.
-3. Use the Huge APP partition and install NimBLE-Arduino. Run the Phone Link Test (section 7).
+### 8.3 Reliability check on the bike
+
+Leave the module running with the phone connected for 30+ minutes, triggering a few close passes (`X`, or real ones). Then check: no `INFO BOOT reason` other than `power on`; `DEBUG HEAP min=` stays well above 40000; `INFO Phone disconnected` lines are rare, and when they happen the reason is given; the app's "Dropped N times" count stays low.

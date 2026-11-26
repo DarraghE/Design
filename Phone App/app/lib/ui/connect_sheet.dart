@@ -91,6 +91,15 @@ class _ConnectSheetState extends State<ConnectSheet> {
                     subtitle: m.error != null && !m.connected ? Text(m.error!, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
                   ),
                 ),
+                if (m.drops > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Dropped ${m.drops} time${m.drops == 1 ? '' : 's'} since the app started. '
+                      'Last: ${m.lastDrop} at ${_time(m.lastDropAt!)}.',
+                      style: const TextStyle(color: Palette.muted, fontSize: 13),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(
@@ -176,3 +185,6 @@ class _ConnectSheetState extends State<ConnectSheet> {
 
   static String _bars(int rssi) => rssi > -60 ? 'strong' : (rssi > -75 ? 'good' : 'weak');
 }
+
+String _time(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';

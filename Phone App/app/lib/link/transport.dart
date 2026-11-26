@@ -15,6 +15,9 @@ abstract class LinkTransport {
 
   bool get isDemo => false;
 
+  /// Why the link dropped, in plain words (null if unknown or still up).
+  String? get dropReason => null;
+
   Future<void> write(List<int> data);
 
   Future<void> close();

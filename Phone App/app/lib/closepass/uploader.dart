@@ -43,7 +43,7 @@ class IncidentUploader {
   IncidentUploader({required this.endpoint, this.token = '', http.Client? client, this.timeout = const Duration(seconds: 45)})
       : _http = client ?? http.Client();
 
-  static const String appVersion = '1.0.1';
+  static const String appVersion = '1.0.2';
 
   /// The `incident` part.
   static Map<String, dynamic> incidentJson(Incident i) => {

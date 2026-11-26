@@ -121,8 +121,13 @@ void main() {
     // The link drops (bike switched off): the app keeps trying and gets it back.
     await finder.opened.last.close();
     await until(() => !m.connected);
+    // The drop is counted and explained (the demo module gives no reason).
+    expect(m.drops, 1);
+    expect(m.lastDrop, 'unknown reason');
+    expect(m.error, contains('Connection lost'));
     await until(() => m.connected);
     expect(finder.opened.length, 2);
+    expect(m.error, isNull, reason: 'cleared once reconnected');
     // Disconnecting by hand stops the retries.
     await m.disconnect();
     final before = finder.opens;
